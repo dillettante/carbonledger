@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# 실행 산출물(감사추적·리포트) — 사용자 데이터라 커밋 금지
+out/
+**/out/
+examples/out/
+reviewed/
+
+# 내부 계획 문서(로컬 경로·내부 프로젝트명 포함) — 공개 배포 제외
+PLAN.md
+
+# 실제 증빙(개인정보) — examples의 합성 픽스처만 커밋
+# 실 영수증·고지서는 절대 커밋하지 말 것
+*.local.*
+secrets.env
+.env
+
+# OS
+.DS_Store

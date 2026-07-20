@@ -1,0 +1,26 @@
+[project]
+name = "carbonledger"
+version = "0.1.0"
+description = "영수증·고지서·설문을 로컬 AI로 읽어 조직 온실가스 배출량(Scope 1·2·3)과 탄소발자국을 산정하는 CLI"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.28",   # LM Studio(로컬 비전 LLM) · Kakao Local 호출
+    "openpyxl>=3.1",    # xlsx 리포트
+]
+
+[project.optional-dependencies]
+pdf = ["pymupdf>=1.24"]   # 고지서 PDF→이미지 렌더(Phase 2). 없으면 macOS sips로 폴백
+
+[project.scripts]
+carbonledger = "carbonledger.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["carbonledger*"]
+
+[tool.setuptools.package-data]
+carbonledger = ["data/*.json", "data/*.md"]

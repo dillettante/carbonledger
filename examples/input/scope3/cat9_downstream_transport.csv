@@ -1,0 +1,3 @@
+item,activity,unit,factor_id,factor,factor_source
+제품 배송 트럭(30t×200km),6000,tonne-km,freight_hgv,,
+수출 해상운송(100t×500km),50000,tonne-km,freight_ship_container,,

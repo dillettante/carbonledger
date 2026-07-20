@@ -1,0 +1,5 @@
+employee_id,mode,factor_id,oneway_km,workdays
+E001,지하철,commute_subway,18,220
+E002,시내버스,commute_bus_local,9,220
+E003,승용차(휘발유),commute_car_petrol,25,220
+E004,승용차(하이브리드),commute_car_hybrid,30,200

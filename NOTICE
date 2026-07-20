@@ -1,0 +1,68 @@
+carbonledger
+Copyright 2026 dillettante
+
+로컬 AI(비전 LLM)로 영수증·고지서·설문을 읽어 조직 온실가스 배출량
+(Scope 1·2·3)과 탄소발자국을 산정하는 CLI.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this software except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+────────────────────────────────────────────────────────────────────
+산출물의 성격 (중요)
+────────────────────────────────────────────────────────────────────
+본 소프트웨어의 산출물(배출량·탄소발자국 리포트)은 기계 산정된 **추정치**이며,
+배출권거래제·목표관리제 명세서 등 규제 신고 자료가 아니다. 거리기반·지출기반
+산정은 명세서 방법론과 다르고, 계수 일부는 해외정부공식·학술·사용자입력 등급이다.
+규제 신고 전에는 소관기관(온실가스종합정보센터 gir.go.kr / 한국환경공단)의
+확정계수·최신 고시로 재검증해야 한다.
+
+────────────────────────────────────────────────────────────────────
+제3자 데이터·배출계수 출처 및 라이선스
+────────────────────────────────────────────────────────────────────
+본 배포물의 data/factors.json에 수록된 배출계수는 아래 출처에서 인용했다.
+각 계수의 값·단위·연도·신뢰수준은 factors.json의 항목별 필드에 명시돼 있다.
+
+1) 한국 국가 고유 연료 배출계수 (Scope 1: 휘발유·경유·도시가스)
+   - 출처: 「온실가스 배출권거래제의 배출량 보고 및 인증에 관한 지침」[별표 12]
+     (환경부고시). 국가법령정보센터.
+   - 성격: 대한민국 법령·고시에 포함된 사실 정보.
+
+2) 국가 전력배출계수 (Scope 2)
+   - 출처: 온실가스종합정보센터(gir.go.kr) 공표 국가 전력배출계수.
+   - 성격: 정부 공표 통계 수치.
+
+3) DEFRA/DESNZ 2024 Greenhouse Gas Conversion Factors
+   (Scope 3: 항공·버스·숙박·통근 수단, 화물운송 톤·km, 폐기물 처리 톤당,
+    연료·전력 WTT(well-to-tank), 전력 송배전 손실 T&D)
+   - 출처: UK Department for Energy Security and Net Zero,
+     "2024 Government Greenhouse Gas Conversion Factors for Company Reporting"
+     (condensed set / full set).
+   - 라이선스: Open Government Licence v3.0 (OGL v3).
+     재배포 시 출처 표시 의무를 이행한다.
+     http://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/
+   - 한국 완제 tonne·km/tonne 계수 및 전력 WTT/T&D 한국 값은 부재하여
+     DEFRA 값을 대체·프록시로 사용하며, 그 한계는 리포트·factors.json에 명시된다.
+
+4) KTX 인·km 배출계수 (Scope 3: 철도)
+   - 출처: 배준형·김진준·어성욱, 「고속철도 온실가스 감축량 산정을 위한
+     교통수단별 비교 연구」, 한국철도학회논문집 24(2), 2021. (학술 인용)
+
+5) 철도역 마스터·좌표
+   - 출처: 공공데이터포털 한국철도공사 역 정보 데이터셋(data.go.kr).
+
+지출기반 산업계수(Scope 3 카테고리 1)는 현행·공개·무료의 한국 계수표 부재로
+기본값을 수록하지 않으며, 사용자가 출처와 함께 직접 입력한다(spend.csv).
+
+────────────────────────────────────────────────────────────────────
+소프트웨어 의존성
+────────────────────────────────────────────────────────────────────
+- requests (Apache 2.0)
+- openpyxl (MIT)
+- (선택) pymupdf (AGPL/상용) — 고지서 PDF 렌더용. 미설치 시 macOS sips로 폴백.
+  pymupdf를 설치·사용하는 경우 그 라이선스(AGPL) 조건이 적용된다.
+
+비전 LLM 추론은 사용자 로컬 환경(LM Studio 등)에서 수행되며, 본 배포물은
+모델 가중치를 포함하지 않는다.

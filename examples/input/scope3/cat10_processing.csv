@@ -1,0 +1,2 @@
+item,activity,unit,factor,factor_source
+중간재 A 고객가공(판매 500t),250000,kWh,0.4173,고객 가공공정 전력 원단위 추정×국가전력계수

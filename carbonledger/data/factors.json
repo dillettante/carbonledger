@@ -1,0 +1,237 @@
+{
+  "_meta": {
+    "version": "0.1.0-draft",
+    "generated": "2026-07-20",
+    "description": "carbonledger 배출계수 레지스트리. 각 계수는 값·단위·출처·연도·GWP기준·신뢰수준을 명시한다. 모든 배출량 레코드는 factor_id를 달고 감사추적된다.",
+    "confidence_levels": {
+      "국가공식": "한국 정부 고시·확정공표 (gir·환경부·배출권거래제 지침)",
+      "해외정부공식": "해외 정부 공식 계수 (DEFRA/DESNZ 등). 한국 실무 통용·GHG Protocol 인정",
+      "학술": "국내외 학술 논문 실측치",
+      "사용자입력": "공개 계수 부재로 사용자가 출처와 함께 직접 입력",
+      "참고": "수록하되 자동산정 비활성 (별건 처리 필요)"
+    },
+    "gwp_note": "한국 3차 계획기간 지침=IPCC SAR(CH4 21·N2O 310). 4차 계획기간(2026~)=AR5(CH4 28·N2O 265). 계수별 gwp_basis 참조.",
+    "disclaimer": "본 계수는 조직 탄소발자국 추정용이다. 배출권거래제·목표관리제 명세서 등 규제 신고 전에는 소관기관(gir.go.kr·한국환경공단)의 확정계수·최신 고시로 반드시 재검증할 것. 거리기반·지출기반 산정은 명세서 방법론과 다르다."
+  },
+
+  "fuel_gasoline": {
+    "value": 2.177, "unit": "kgCO2/L", "scope": 1, "activity": "휘발유 연소(CO2)",
+    "derivation": "순발열량 30.4 MJ/L × CO2 배출계수 71,600 kgCO2/TJ × 1e-6",
+    "source": "온실가스 배출권거래제 배출량 보고·인증 지침 [별표 12] 국가 고유 발열량·배출계수 (Tier2). 현행 환경부고시 제2025-28호 계열",
+    "source_url": "https://www.law.go.kr/LSW/flDownload.do?flSeq=143510057",
+    "year": 2017, "gwp_basis": "SAR(3차 계획기간)", "confidence": "국가공식",
+    "note": "CO2만 반영. CH4·N2O(<3%)는 이동/고정 연소형태별 Tier1 계수를 규제 신고 전 가산. 별표12는 '17.12 발열량 기준."
+  },
+  "fuel_diesel": {
+    "value": 2.577, "unit": "kgCO2/L", "scope": 1, "activity": "경유 연소(CO2)",
+    "derivation": "순발열량 35.2 MJ/L × CO2 배출계수 73,200 kgCO2/TJ × 1e-6",
+    "source": "온실가스 배출권거래제 지침 [별표 12] (Tier2)",
+    "source_url": "https://www.law.go.kr/LSW/flDownload.do?flSeq=143510057",
+    "year": 2017, "gwp_basis": "SAR(3차 계획기간)", "confidence": "국가공식",
+    "note": "CO2만 반영. CH4·N2O는 연소형태별 가산 필요."
+  },
+  "fuel_citygas_lng": {
+    "value": 2.182, "unit": "kgCO2/Nm3", "scope": 1, "activity": "도시가스(LNG) 연소(CO2)",
+    "derivation": "순발열량 38.9 MJ/Nm³ × CO2 배출계수 56,100 kgCO2/TJ × 1e-6",
+    "source": "온실가스 배출권거래제 지침 [별표 12] (Tier2)",
+    "source_url": "https://www.law.go.kr/LSW/flDownload.do?flSeq=143510057",
+    "year": 2017, "gwp_basis": "SAR(3차 계획기간)", "confidence": "국가공식",
+    "note": "단위=Nm³(부피). 고지서가 열량단가제로 총발열량 MJ를 청구하면 순/총 보정(≈0.903) 후 적용하거나, 계량 m³를 순발열량 38.9로 환산해 곱할 것. CH4·N2O 가산 별도."
+  },
+
+  "electricity_kr": {
+    "value": 0.4173, "unit": "kgCO2eq/kWh", "scope": 2, "activity": "전력 사용(location-based)",
+    "source": "2023년 국가 전력배출계수(소비단), 기후에너지환경부·온실가스종합정보센터, 국가 온실가스 통계관리위원회 확정, 2025.12 공표",
+    "source_url": "https://www.gir.go.kr/home/index.do?menuId=36",
+    "year": 2023, "gwp_basis": "확인 필요", "confidence": "국가공식",
+    "verification": "값 0.4173은 정부 확정공표(언론 확정보도 경유). gir 원문 PDF는 접근차단으로 미열람 — 신고 전 gir.go.kr 게시판에서 원문 대조 권장.",
+    "note": "location-based 단일. market-based(녹색프리미엄·REC·PPA) 미반영. 발전단 0.3844는 언론보도 단일출처(미확인). GWP기준·가스별 분해는 gir 원문 미확인. 직전 공표=2020~2022 3년평균 0.4541."
+  },
+
+  "travel_rail_ktx": {
+    "value": 0.0269, "unit": "kgCO2eq/passenger-km", "scope": 3, "category": 6, "activity": "KTX 철도 출장",
+    "source": "배준형·김진준·어성욱, 「고속철도 온실가스 감축량 산정을 위한 교통수단별 비교 연구」, 한국철도학회논문집 24(2), 2021",
+    "source_url": "https://www.kci.go.kr/kciportal/ci/sereArticleSearch/ciSereArtiView.kci?sereArticleSearchBean.artiId=ART002692216",
+    "year": 2021, "gwp_basis": "확인 필요", "confidence": "학술",
+    "note": "KTX 26.9 gCO2eq/인·km. KTX 한정 — 무궁화·ITX·SRT 별도 공표값 없음(잠정 동일 적용). 26.9의 전력믹스 기준연도는 논문 본문 미확인."
+  },
+  "travel_air_domestic": {
+    "value": 0.273, "unit": "kgCO2eq/passenger-km", "scope": 3, "category": 6, "activity": "국내선 항공 출장",
+    "source": "DEFRA/DESNZ 2024 GHG conversion factors, Flights/Domestic/Average passenger (With RF)",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0",
+    "note": "RF(복사강제력) 포함, WTT 미포함. 거리 uplift 8%가 계수에 내장 → haversine(GCD) 거리에 별도 거리보정 하지 말 것(이중계산 방지)."
+  },
+  "travel_bus_intercity": {
+    "value": 0.02717, "unit": "kgCO2eq/passenger-km", "scope": 3, "category": 6, "activity": "고속·시외버스 출장(Coach)",
+    "source": "DEFRA/DESNZ 2024 GHG conversion factors, Coach",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0",
+    "note": "구 프로토타입의 0.089는 2024 표에 없는 출처불명값이라 교체. 시내버스는 travel_bus_local 참조."
+  },
+  "travel_bus_local": {
+    "value": 0.10846, "unit": "kgCO2eq/passenger-km", "scope": 3, "category": 6, "activity": "시내버스",
+    "source": "DEFRA/DESNZ 2024 GHG conversion factors, Average local bus",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0", "note": ""
+  },
+  "travel_hotel_kr": {
+    "value": 55.8, "unit": "kgCO2eq/room-night", "scope": 3, "category": 6, "activity": "국내 숙박",
+    "source": "DEFRA/DESNZ 2024 GHG conversion factors, Hotel stay — Korea (Cornell CHR Hotel Footprinting Tool 유래)",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0",
+    "note": "한국 특화값 존재(참고: 일본 39·중국 53.5·영국 10.4)."
+  },
+
+  "commute_car_petrol": {
+    "value": 0.16450, "unit": "kgCO2eq/km", "scope": 3, "category": 7, "activity": "통근 승용차(휘발유)",
+    "source": "DEFRA/DESNZ 2024, Average car/Petrol",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0",
+    "note": "차량당(vehicle·km). 1인 탑승 가정이면 그대로, 카풀 시 탑승인원으로 나눔."
+  },
+  "commute_car_diesel": {
+    "value": 0.16984, "unit": "kgCO2eq/km", "scope": 3, "category": 7, "activity": "통근 승용차(경유)",
+    "source": "DEFRA/DESNZ 2024, Average car/Diesel",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0", "note": "차량당."
+  },
+  "commute_car_hybrid": {
+    "value": 0.12607, "unit": "kgCO2eq/km", "scope": 3, "category": 7, "activity": "통근 승용차(하이브리드)",
+    "source": "DEFRA/DESNZ 2024, Average car/Hybrid",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0", "note": "차량당."
+  },
+  "commute_subway": {
+    "value": 0.02780, "unit": "kgCO2eq/passenger-km", "scope": 3, "category": 7, "activity": "통근 지하철",
+    "source": "DEFRA/DESNZ 2024, London Underground (한국 지하철 공식 인·km 계수 부재로 대용)",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0",
+    "note": "한국 전력믹스가 영국보다 탄소집약적이라 과소 가능성. 서울교통공사 지속가능경영보고서 실측 확보 시 교체 예정."
+  },
+  "commute_bus_local": {
+    "value": 0.10846, "unit": "kgCO2eq/passenger-km", "scope": 3, "category": 7, "activity": "통근 시내버스",
+    "source": "DEFRA/DESNZ 2024, Average local bus",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0", "note": ""
+  },
+
+  "wtt_gasoline": {
+    "value": 0.58094, "unit": "kgCO2eq/L", "scope": 3, "category": 3, "activity": "휘발유 상류배출(WTT)",
+    "source": "DEFRA/DESNZ 2024, WTT- fuels (petrol average)",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0",
+    "note": "채굴·정제·수송 상류배출. Scope 1 휘발유 연소(fuel_gasoline)에서 자동 파생. 원유 상류라 국가차 작으나 정제·수송은 UK 기준."
+  },
+  "wtt_diesel": {
+    "value": 0.61101, "unit": "kgCO2eq/L", "scope": 3, "category": 3, "activity": "경유 상류배출(WTT)",
+    "source": "DEFRA/DESNZ 2024, WTT- fuels (diesel average)",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0",
+    "note": "Scope 1 경유 연소(fuel_diesel)에서 자동 파생."
+  },
+  "wtt_citygas_lng": {
+    "value": 0.3366, "unit": "kgCO2eq/Nm3", "scope": 3, "category": 3, "activity": "도시가스 상류배출(WTT)",
+    "source": "DEFRA/DESNZ 2024, WTT- fuels (natural gas per m³)",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0",
+    "note": "m³ 기준을 Nm³에 근사 적용. Scope 1 도시가스(fuel_citygas_lng)에서 자동 파생."
+  },
+  "wtt_electricity_kr": {
+    "value": 0.0459, "unit": "kgCO2eq/kWh", "scope": 3, "category": 3, "activity": "전력 발전연료 상류(WTT)",
+    "source": "DEFRA/DESNZ 2024, WTT- UK electricity (generation) — 한국 값 부재로 UK 프록시",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0",
+    "note": "⚠️ UK 전력 상류 프록시 — 한국 발전믹스와 다르다. 규제용 부적합, 자사 값 확보 시 교체. Scope 2 전력에서 자동 파생."
+  },
+  "td_electricity_kr": {
+    "value": 0.0183, "unit": "kgCO2eq/kWh", "scope": 3, "category": 3, "activity": "전력 송배전 손실(T&D)",
+    "source": "DEFRA/DESNZ 2024, Transmission and distribution — 한국 값 부재로 UK 프록시",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0",
+    "note": "⚠️ UK 송배전 손실 프록시 — 한국 손실률(~3.5%)·발전계수와 다르다. 규제용 부적합. Scope 2 전력에서 자동 파생."
+  },
+
+  "freight_hgv": {
+    "value": 0.09752, "unit": "kgCO2eq/tonne-km", "scope": 3, "category": 4, "activity": "화물 대형트럭(HGV)",
+    "source": "DEFRA/DESNZ 2024, Freighting goods (All HGVs, average laden, diesel)",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0",
+    "note": "카테고리 4(업스트림)·9(다운스트림) 공용. 활동량=톤×km. 한국 완제 tonne-km 계수 부재로 DEFRA 대체."
+  },
+  "freight_van": {
+    "value": 0.61643, "unit": "kgCO2eq/tonne-km", "scope": 3, "category": 4, "activity": "화물 승합(Van ≤3.5t)",
+    "source": "DEFRA/DESNZ 2024, Freighting goods (Vans, average, diesel)",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0", "note": "활동량=톤×km(사용자가 선곱해 입력). 카테고리 4·9 공용."
+  },
+  "freight_rail": {
+    "value": 0.02779, "unit": "kgCO2eq/tonne-km", "scope": 3, "category": 4, "activity": "화물 철도",
+    "source": "DEFRA/DESNZ 2024, Freighting goods (Rail, freight train)",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0", "note": "활동량=톤×km(사용자가 선곱해 입력). 카테고리 4·9 공용."
+  },
+  "freight_ship_container": {
+    "value": 0.01612, "unit": "kgCO2eq/tonne-km", "scope": 3, "category": 4, "activity": "화물 해운(컨테이너선 평균)",
+    "source": "DEFRA/DESNZ 2024, Freighting goods (Cargo ship, container, average)",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0", "note": "활동량=톤×km(사용자가 선곱해 입력). 카테고리 4·9 공용."
+  },
+  "freight_air_longhaul": {
+    "value": 1.09904, "unit": "kgCO2eq/tonne-km", "scope": 3, "category": 4, "activity": "화물 항공(장거리, RF포함)",
+    "source": "DEFRA/DESNZ 2024, Freighting goods (Air, long-haul to/from UK, with RF)",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0", "note": "활동량=톤×km(사용자가 선곱해 입력). RF(복사강제력) 포함. 카테고리 4·9 공용."
+  },
+
+  "waste_mixed_landfill": {
+    "value": 520.3342, "unit": "kgCO2eq/tonne", "scope": 3, "category": 5, "activity": "혼합 상업·산업폐기물 매립",
+    "source": "DEFRA/DESNZ 2024, Waste disposal (Commercial and industrial waste, Landfill)",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0",
+    "note": "카테고리 5(사업장 폐기물)·12(제품 폐기) 공용. 한국 환경부 완제 tonne당 계수 부재로 DEFRA 대체."
+  },
+  "waste_mixed_combustion": {
+    "value": 6.41061, "unit": "kgCO2eq/tonne", "scope": 3, "category": 5, "activity": "혼합폐기물 소각(에너지회수)",
+    "source": "DEFRA/DESNZ 2024, Waste disposal (Commercial and industrial waste, Combustion)",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0",
+    "note": "⚠️ DEFRA '소각' 계수는 처리공정만 반영하고 폐기물 자체의 직접 연소 CO2(특히 화석유래 플라스틱)를 제외한다. 소각 비중이 큰 한국에서 이 값만 쓰면 대폭 과소산정 — 직접 연소배출은 별도 가산 필요. 카테고리 5·12 공용."
+  },
+  "waste_paper_landfill": {
+    "value": 1164.39015, "unit": "kgCO2eq/tonne", "scope": 3, "category": 5, "activity": "종이·판지 매립",
+    "source": "DEFRA/DESNZ 2024, Waste disposal (Paper and board: paper, Landfill)",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0", "note": "카테고리 5·12 공용."
+  },
+  "waste_plastic_landfill": {
+    "value": 8.88386, "unit": "kgCO2eq/tonne", "scope": 3, "category": 5, "activity": "플라스틱 매립",
+    "source": "DEFRA/DESNZ 2024, Waste disposal (Plastics: average, Landfill)",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0", "note": "카테고리 5·12 공용."
+  },
+  "waste_recycling": {
+    "value": 6.41061, "unit": "kgCO2eq/tonne", "scope": 3, "category": 5, "activity": "재활용(개방·폐쇄루프 처리단계)",
+    "source": "DEFRA/DESNZ 2024, Waste disposal (recycling, closed/open-loop process stage)",
+    "source_url": "https://www.gov.uk/government/publications/greenhouse-gas-reporting-conversion-factors-2024",
+    "year": 2024, "gwp_basis": "AR5(DEFRA)", "confidence": "해외정부공식", "license": "OGL v3.0",
+    "note": "⚠️ 처리공정만 반영(재질 무관 동일값). 재활용의 회피배출(avoided) 크레딧은 미포함 — 별도 방법론. 카테고리 5·12 공용."
+  },
+
+  "spend_category1_USER": {
+    "value": null, "unit": "kgCO2eq/KRW", "scope": 3, "category": 1, "activity": "구매 재화·서비스(지출기반)",
+    "source": "사용자 입력 필수 — 현행·공개·무료의 한국 지출기반 산업계수표 부재(Phase 0 조사 결론)",
+    "year": null, "gwp_basis": null, "confidence": "사용자입력",
+    "note": "spend.csv의 factor·factor_source 열에 사용자가 직접 계수와 출처를 입력해야 산정된다. 실무 관행 소스: 한국은행 환경산업연관표(2006, 구식)·환경부 업종별 Scope3 안내서·해외 USEEIO/CEDA. EPA USEEIO 환율보정은 한국 전력믹스 차이로 오차 과대 → 기본값 금지."
+  },
+
+  "_reference_only": {
+    "district_heat_kdhc_metro": {
+      "value": 34901, "unit": "kgCO2/TJ", "scope": 2, "activity": "지역난방 열(수도권지사, 참고용)",
+      "source": "한국지역난방공사 2024년도 열(스팀) 온실가스 배출계수 공표(2025.3.24, 지침 제2025-28호 제19조)",
+      "source_url": "https://www.data.go.kr/data/15090320/fileData.do",
+      "year": 2024, "confidence": "참고",
+      "note": "지사별 상이(평택 15,717~청주 55,987). 열사용량 추출이 별건이라 v0 자동산정 비활성 — 리포트 '미측정 배출원'에 표기. 자사 지사 계수로 수기 산정 시 참조."
+    }
+  }
+}

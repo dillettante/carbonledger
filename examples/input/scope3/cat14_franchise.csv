@@ -1,0 +1,3 @@
+item,activity,unit,factor_id,factor,factor_source
+가맹점 5개 전기 합계,60000,kWh,electricity_kr,,
+가맹점 도시가스 합계,2000,Nm3,fuel_citygas_lng,,

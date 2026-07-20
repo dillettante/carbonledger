@@ -1,0 +1,3 @@
+item,activity,unit,factor_id,factor,factor_source
+임차 사무실 전기,8000,kWh,electricity_kr,,
+임차 창고 전기(추정),3000,kWh,,0.4173,국가 전력배출계수 2023 준용(사용자 확인)
