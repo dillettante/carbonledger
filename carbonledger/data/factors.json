@@ -41,11 +41,11 @@
 
   "electricity_kr": {
     "value": 0.4173, "unit": "kgCO2eq/kWh", "scope": 2, "activity": "전력 사용(location-based)",
-    "source": "2023년 국가 전력배출계수(소비단), 기후에너지환경부·온실가스종합정보센터, 국가 온실가스 통계관리위원회 확정, 2025.12 공표",
+    "source": "「2025년 승인 국가 온실가스 배출·흡수계수」 전력배출계수, '23년 소비단 CO2-eq — 온실가스종합정보센터(기획총괄팀), 2025-12-18 공표",
     "source_url": "https://www.gir.go.kr/home/index.do?menuId=36",
-    "year": 2023, "gwp_basis": "확인 필요", "confidence": "국가공식",
-    "verification": "값 0.4173은 정부 확정공표(언론 확정보도 경유). gir 원문 PDF는 접근차단으로 미열람 — 신고 전 gir.go.kr 게시판에서 원문 대조 권장.",
-    "note": "location-based 단일. market-based(녹색프리미엄·REC·PPA) 미반영. 발전단 0.3844는 언론보도 단일출처(미확인). GWP기준·가스별 분해는 gir 원문 미확인. 직전 공표=2020~2022 3년평균 0.4541."
+    "year": 2023, "gwp_basis": "AR5('06 IPCC 지침 기준 — 공표문 각주 명시)", "confidence": "국가공식",
+    "verification": "gir 원문 PDF 대조 완료(2026-07-20): 소비단 0.4173·발전단 0.3844 tCO2-eq/MWh, 가스별 분해(소비단 CO2 0.4149 t/MWh·CH4 0.0075·N2O 0.0081 kg/MWh) 전부 원문 확인.",
+    "note": "location-based 단일. market-based(녹색프리미엄·REC·PPA) 미반영. 소비단=소내소비·양수전력·송배전손실 제외 발전량 기준(공표문 각주 3). '21~'23년 3년평균 소비단은 0.4330. '96 IPCC 지침(AR2 GWP) 기준 별표는 소비단 0.3996 — 구 기준 보고체계면 그 값 사용."
   },
 
   "travel_rail_ktx": {
