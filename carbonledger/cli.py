@@ -293,7 +293,7 @@ def cmd_selftest(a):
 
 def main():
     ap = argparse.ArgumentParser(prog="carbonledger",
-                                 description="AI(로컬/상용 선택) 기반 조직 온실가스(Scope 1·2·3) 산정")
+                                 description="영수증·고지서 등 기초자료를 LLM으로 읽어 조직 온실가스(Scope 1·2·3)·탄소발자국 산정")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     r = sub.add_parser("run", help="증빙 폴더 일괄 처리 → 리포트")

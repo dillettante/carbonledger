@@ -1,7 +1,7 @@
 [project]
 name = "carbonledger"
 version = "0.1.0"
-description = "영수증·고지서·설문을 로컬 AI로 읽어 조직 온실가스 배출량(Scope 1·2·3)과 탄소발자국을 산정하는 CLI"
+description = "영수증·고지서 등 기초자료를 LLM으로 읽어 조직 온실가스 배출량(Scope 1·2·3)과 탄소발자국을 자동 산정하는 CLI"
 requires-python = ">=3.10"
 dependencies = [
     "requests>=2.28",   # LM Studio(로컬 비전 LLM) · Kakao Local 호출
