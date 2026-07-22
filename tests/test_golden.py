@@ -50,7 +50,7 @@ def test_travel_pipeline_mocked(tmp_path, monkeypatch):
     # LLM 추출·Kakao 거리를 고정값으로 목킹
     monkeypatch.setattr(extract, "extract", lambda *a, **k: {
         "transport": "철도", "origin": "서울", "destination": "부산",
-        "date": "2026-05-01", "amount": 59800, "passenger": None})
+        "date": "2026-05-01", "amount": 59800})
     monkeypatch.setattr(calc, "distance_km", lambda o, d, t: 400.0)
 
     records, queue = [], []
@@ -70,7 +70,7 @@ def test_period_filter(tmp_path, monkeypatch):
     (travel / "old.jpg").write_bytes(b"\x89PNG fake")
     monkeypatch.setattr(extract, "extract", lambda *a, **k: {
         "transport": "철도", "origin": "서울", "destination": "부산",
-        "date": "2024-01-01", "amount": 50000, "passenger": None})
+        "date": "2024-01-01", "amount": 50000})
     monkeypatch.setattr(calc, "distance_km", lambda o, d, t: 400.0)
 
     records, queue = [], []
@@ -174,6 +174,29 @@ def test_scope3_cat3_derivation_golden(tmp_path):
     assert total == round(50 * 0.61101 + 500 * 0.0459 + 500 * 0.0183, 3), f"cat3 파생 오류: {total}"
 
 
+def test_review_merge_idempotent(tmp_path):
+    """review 재실행이 교정본을 이중 계상하지 않고, 교정된 건은 큐에서 빠져야."""
+    records = [
+        {"source_file": "a.jpg", "scope": 2, "kgco2e": 100.0},
+        {"source_file": "b.jpg", "scope": 2, "kgco2e": 200.0},
+    ]
+    queue = [{"source_file": "c.jpg", "issues": ["보고기간 확인 불가"]}]
+    corrected = [{"source_file": "c.jpg", "scope": 2, "kgco2e": 50.0, "human_corrected": True}]
+
+    merged, remaining = cli._merge_reviewed(records, queue, corrected)
+    assert sum(r["kgco2e"] for r in merged) == 350.0, "1차 병합 합계 오류"
+    assert remaining == [], "교정된 건이 큐에 남음(미포함으로 오표시)"
+
+    # 2차 실행: 이미 병합된 원장에 같은 교정본을 또 넣어도 합계 불변(멱등)
+    merged2, _ = cli._merge_reviewed(merged, remaining, corrected)
+    assert sum(r["kgco2e"] for r in merged2) == 350.0, "review 재실행에 이중 계상"
+    assert len(merged2) == 3, "레코드 중복"
+
+    # 원본 재추출 건을 교정본이 '대체'하는지
+    merged3, _ = cli._merge_reviewed(records, [], [{"source_file": "a.jpg", "kgco2e": 999.0}])
+    assert sum(r["kgco2e"] for r in merged3) == 1199.0, "교정본이 원본을 대체하지 않음"
+
+
 if __name__ == "__main__":
     import tempfile
 
@@ -188,7 +211,8 @@ if __name__ == "__main__":
                          (test_guess_bill_type_gasoline, False),
                          (test_bill_date_null_fail_closed, True),
                          (test_scope3_freight_waste_golden, False),
-                         (test_scope3_cat3_derivation_golden, False)]:
+                         (test_scope3_cat3_derivation_golden, False),
+                         (test_review_merge_idempotent, False)]:
         with tempfile.TemporaryDirectory() as d:  # 테스트마다 새 tmp(충돌 방지)
             fn(Path(d), _P()) if needs_mp else fn(Path(d))
-    print("golden 테스트 10종 통과 ✅")
+    print("golden 테스트 11종 통과 ✅")

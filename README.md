@@ -1,10 +1,30 @@
 # carbonledger
 
-**영수증·고지서 등 기초자료를 LLM으로 읽어 조직 온실가스 배출량(Scope 1·2·3)과 탄소발자국을 자동 산정하는 CLI.**
+[![test](https://github.com/dillettante/carbonledger/actions/workflows/test.yml/badge.svg)](https://github.com/dillettante/carbonledger/actions/workflows/test.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+
+**영수증·고지서 등 기초자료를 LLM으로 읽어 조직 온실가스 배출량(Scope 1·2·3)과 탄소발자국을 자동 산정하는 CLI.** (한국 증빙·계수 특화)
 
 기초자료를 폴더에 넣고 한 번 실행하면 → 비전 LLM이 활동량(연료 L·전력 kWh·이동 구간 등)을 뽑고 → 검증 관문을 통과한 것만 배출계수를 곱해 → **조직 탄소발자국 리포트(md·xlsx)** 로 집계한다.
 
 LLM은 **Claude·ChatGPT 등(상용)** 또는 **LM Studio, Ollama 등(로컬)** 중 선택 — 기밀 증빙이면 로컬 백엔드를 쓰면 이미지가 외부로 나가지 않는다.
+
+### 나오는 것
+
+![샘플 리포트](docs/sample_report.png)
+
+*모든 수치에 계수 출처·연도·GWP기준·신뢰수준·한계가 따라붙는다 — 감사·검증 시 "이 숫자가 어디서 왔나"를 되짚을 수 있게. (전체 샘플: [`examples/sample_output/`](examples/sample_output))*
+
+### 다른 방법과 뭐가 다른가
+
+| | 무료 계산기(수기 입력) | 탄소회계 SaaS | **carbonledger** |
+|---|---|---|---|
+| 입력 | 사람이 숫자 전사 | 사람 입력 또는 연동 | **AI가 증빙에서 추출** |
+| 기밀 증빙 | — | 업체 서버 전송 | **로컬 LLM이면 유출 없음** |
+| 계수 출처 | 대개 비공개 | 대개 비공개 | **전량 공개·리포트에 자동 부록** |
+| 오추출 방어 | — | — | **검증 관문 + 검토 큐(fail-closed)** |
+| 비용 | 무료 | 유료 구독 | 무료(오픈소스) |
 
 > ⚠️ **먼저 읽을 것** — 산출물은 **추정치**다. 배출권거래제·목표관리제 명세서 등 규제 신고 자료가 아니다. 거리기반·지출기반 산정은 명세서 방법론과 다르고, 일부 계수는 해외정부공식·학술·사용자입력 등급이다. 신고 전 소관기관(gir.go.kr / 한국환경공단)의 확정계수로 재검증할 것. (계수별 출처·신뢰수준은 리포트 부록과 `carbonledger/data/factors.json`에 명시.)
 
@@ -29,14 +49,14 @@ LLM은 **Claude·ChatGPT 등(상용)** 또는 **LM Studio, Ollama 등(로컬)** 
 | 15 투자 | `scope3/cat15_*.csv` | PCAF 귀속공식(잔액/기업가치 × 피투자 배출) |
 | 2·4·5·8~14 (자본재·운송·폐기물·임차/임대·가공·사용·폐기·프랜차이즈) | `scope3/cat{N}_*.csv` | 통일 CSV 한 벌: 활동량+단위+계수(레지스트리 또는 사용자 입력) |
 
-넣은 카테고리만 산정되고, 안 넣은 카테고리는 리포트에 "미측정"+측정법 안내로 표시된다. CSV 열 정의·작성법은 [PLAYBOOK.md](PLAYBOOK.md)에.
+**자동화 농도는 카테고리마다 다르다** — 6·7·1·3은 증빙 AI추출/설문/파생으로 손이 거의 안 가고, 2·4·5·8~15는 **사용자가 활동량 CSV를 준비**하면 계수 적용·검증·감사추적·집계를 툴이 맡는다(계수 선택과 단위 검증이 실무의 실제 난점이라 이 부분이 값을 한다). 넣은 카테고리만 산정되고, 안 넣은 카테고리는 리포트에 "미측정"+측정법 안내로 표시된다. CSV 열 정의·작성법은 [PLAYBOOK.md](PLAYBOOK.md)에.
 
 **Scope 귀속은 폴더가 선언한다.** 같은 주유 영수증도 법인차면 Scope 1, 개인차 출장이면 Scope 3-6, 통근이면 3-7이다 — AI가 추측하지 않는다. 어느 폴더에 넣을지는 [`carbonledger/data/boundary.md`](carbonledger/data/boundary.md)의 조직경계 안내를 따른다.
 
 ## 설치
 
 ```bash
-git clone <this-repo> carbonledger && cd carbonledger
+git clone https://github.com/dillettante/carbonledger.git && cd carbonledger
 pip install -e .          # requests + openpyxl
 # (선택) 고지서 PDF를 다룬다면: pip install -e ".[pdf]"   # pymupdf(AGPL)
 ```
@@ -125,7 +145,8 @@ carbonledger run examples/input --period 2026 --out examples/out
 공개 배포 툴의 신뢰성은 "이 숫자가 어디서 왔나"를 추적할 수 있느냐다. 모든 배출량 레코드는 `factor_id`를 달고 다니고, 리포트는 사용된 계수를 **값·단위·출처·연도·GWP기준·신뢰수준·한계**로 자동 부록화한다.
 
 - 신뢰수준: `국가공식`(gir 고시) > `해외정부공식`(DEFRA, OGL v3) > `학술`(KCI) > `사용자입력`
-- **알려진 한계를 숨기지 않는다**: 연료계수는 CO2만 반영(CH4·N2O 별도 가산 필요), 전력계수 GWP기준 미확인, 직선거리 근사(철도 ×1.2 우회보정) 등이 리포트 부록·비고에 그대로 표기된다.
+- **알려진 한계를 숨기지 않는다**: 연료계수는 CO2만 반영(CH4·N2O 별도 가산 필요), 전력 WTT/T&D는 UK 프록시, 직선거리 근사(철도·버스 ×1.2 우회보정) 등이 리포트 부록·비고에 그대로 표기된다.
+- 국가 전력배출계수(0.4173)는 **gir 공표 원문 PDF 대조 완료**(2026-07-20, GWP=AR5) — 검증 이력도 factors.json에 남긴다.
 - 계수 조사 근거 전량은 [`PHASE0_RESEARCH.md`](PHASE0_RESEARCH.md)에.
 
 ## 한계 (알고 쓰라)

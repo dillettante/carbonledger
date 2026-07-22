@@ -1,6 +1,6 @@
 # 조직 온실가스 배출량 리포트
 
-- 보고기간: **2026**  · 생성일: 2026-07-20
+- 보고기간: **2026**  · 생성일: 2026-07-22
 - 자동 산정 건수: 30  · 검토 대기(미포함): 0
 
 ## 1. 총괄 — 조직 탄소발자국
@@ -13,6 +13,7 @@
 | **합계** | **466.039 tCO2eq (466,039.3 kg)** |
 
 > Scope 2는 location-based 단일 산정이다. market-based(녹색프리미엄·REC·PPA) 미반영.
+> Scope 1 연료는 **CO2 단독** 산정(CH4·N2O 미가산, 통상 <3%) — 합계는 계수별 GWP 기준이 혼재된 추정치다(부록 §5 참조).
 
 ## 2. Scope 3 카테고리별 (GHG Protocol 15개 프레임)
 
@@ -85,7 +86,7 @@
 |---|---|---|---|---|---|---|---|
 | `travel_rail_ktx` | 0.0269 | kgCO2eq/passenger-km | 학술 | 2021 | 확인 필요 | 배준형·김진준·어성욱, 「고속철도 온실가스 감축량 산정을 위한 교통수단별 비교 연구」, 한 | KTX 26.9 gCO2eq/인·km. KTX 한정 — 무궁화·ITX·SRT 별도 공표값 없음(잠정 동일 적용). 26.9의  |
 | `fuel_diesel` | 2.577 | kgCO2/L | 국가공식 | 2017 | SAR(3차 계획기간) | 온실가스 배출권거래제 지침 [별표 12] (Tier2) | CO2만 반영. CH4·N2O는 연소형태별 가산 필요. |
-| `electricity_kr` | 0.4173 | kgCO2eq/kWh | 국가공식 | 2023 | 확인 필요 | 2023년 국가 전력배출계수(소비단), 기후에너지환경부·온실가스종합정보센터, 국가 온실가스 | location-based 단일. market-based(녹색프리미엄·REC·PPA) 미반영. 발전단 0.3844는 언론보도  |
+| `electricity_kr` | 0.4173 | kgCO2eq/kWh | 국가공식 | 2023 | AR5('06 IPCC 지침 기준 — 공표문 각주 명시) | 「2025년 승인 국가 온실가스 배출·흡수계수」 전력배출계수, '23년 소비단 CO2-eq | location-based 단일. market-based(녹색프리미엄·REC·PPA) 미반영. 소비단=소내소비·양수전력·송배전 |
 | `commute_subway` | 0.0278 | kgCO2eq/passenger-km | 해외정부공식 | 2024 | AR5(DEFRA) | DEFRA/DESNZ 2024, London Underground (한국 지하철 공식 인· | 한국 전력믹스가 영국보다 탄소집약적이라 과소 가능성. 서울교통공사 지속가능경영보고서 실측 확보 시 교체 예정. |
 | `commute_bus_local` | 0.10846 | kgCO2eq/passenger-km | 해외정부공식 | 2024 | AR5(DEFRA) | DEFRA/DESNZ 2024, Average local bus |  |
 | `commute_car_petrol` | 0.1645 | kgCO2eq/km | 해외정부공식 | 2024 | AR5(DEFRA) | DEFRA/DESNZ 2024, Average car/Petrol | 차량당(vehicle·km). 1인 탑승 가정이면 그대로, 카풀 시 탑승인원으로 나눔. |
@@ -104,7 +105,7 @@
 | `wtt_electricity_kr` | 0.0459 | kgCO2eq/kWh | 해외정부공식 | 2024 | AR5(DEFRA) | DEFRA/DESNZ 2024, WTT- UK electricity (generation) | ⚠️ UK 전력 상류 프록시 — 한국 발전믹스와 다르다. 규제용 부적합, 자사 값 확보 시 교체. Scope 2 전력에서 자동 |
 | `td_electricity_kr` | 0.0183 | kgCO2eq/kWh | 해외정부공식 | 2024 | AR5(DEFRA) | DEFRA/DESNZ 2024, Transmission and distribution —  | ⚠️ UK 송배전 손실 프록시 — 한국 손실률(~3.5%)·발전계수와 다르다. 규제용 부적합. Scope 2 전력에서 자동 파 |
 
-> 비고의 '한계·누락'을 확인할 것. 예: 연료계수는 **CO2만 반영**(CH4·N2O 별도 가산 필요), 전력계수는 GWP기준 미확인 등 — 헤드라인 수치에 영향.
+> 비고의 '한계·누락'을 확인할 것. 예: 연료계수는 **CO2만 반영**(CH4·N2O 별도 가산 필요), 전력 WTT/T&D는 UK 프록시 등 — 헤드라인 수치에 영향. (전력계수 0.4173은 gir 원문 검증 완료 — GWP=AR5.)
 
 ---
 

@@ -279,9 +279,23 @@ def cmd_review(a):
         print("\n(교정 레코드 형식은 records.json의 records[] 항목과 동일 + kgco2e 계산값)")
         return
 
-    merged = data["records"] + corrected
-    report.build(merged, [q for q in queue], str(out), period=data.get("period"))
-    print(f"교정 {len(corrected)}건 병합 재집계 완료 → {out}/report.md")
+    merged, remaining = _merge_reviewed(data["records"], queue, corrected)
+    report.build(merged, remaining, str(out), period=data.get("period"))
+    print(f"교정 {len(corrected)}건 병합 재집계 완료 → {out}/report.md "
+          f"(잔여 검토대기 {len(remaining)}건)")
+
+
+def _merge_reviewed(records, queue, corrected):
+    """교정본 병합 — 멱등(idempotent).
+
+    source_file 기준으로 교정본이 기존 레코드를 '대체'하고(단순 append면 review
+    재실행 때마다 같은 배출량이 이중 계상된다), 교정된 건은 검토 큐에서 제거한다
+    (교정돼 합계에 포함된 건이 '미포함'으로 계속 표시되는 모순 방지).
+    """
+    corr_keys = {c.get("source_file") for c in corrected}
+    base = [r for r in records if r.get("source_file") not in corr_keys]
+    remaining = [q for q in queue if q.get("source_file") not in corr_keys]
+    return base + corrected, remaining
 
 
 def cmd_selftest(a):

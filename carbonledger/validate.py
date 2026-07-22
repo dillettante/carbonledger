@@ -182,7 +182,7 @@ def validate_folder_type(folder_kind: str, doc_type: str) -> list[str]:
 
 def selftest():
     ok = {"transport": "철도", "origin": "서울", "destination": "부산",
-          "date": "2026-07-12", "amount": 59800, "passenger": "홍길동"}
+          "date": "2026-07-12", "amount": 59800}
     assert validate_transport(ok) == [], "정상 교통레코드는 통과해야"
     assert any("금액" in i for i in validate_transport({**ok, "amount": -100})), "음수금액 미적발"
     assert any("역명" in i for i in validate_transport({**ok, "origin": "서을"})), "오독역명 미적발"

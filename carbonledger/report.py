@@ -54,9 +54,12 @@ def build(records: list[dict], review_queue: list[dict], out_dir: str,
     s3 = _sum(records, scope=3)
     total = round(s1 + s2 + s3, 3)
 
-    # records.json — 감사추적 원장
+    # records.json — 감사추적 원장 (어느 툴·계수판으로 산정했는지 스탬프)
+    from . import __version__
     (out / "records.json").write_text(
         json.dumps({"period": period, "generated": str(date.today()),
+                    "tool_version": __version__,
+                    "factors_version": factors.meta().get("version", ""),
                     "records": records, "review_queue": review_queue},
                    ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -84,7 +87,8 @@ def _write_md(path, records, review_queue, s1, s2, s3, total, period):
     L.append(f"| Scope 2 (전력, location-based) | {_t(s2)} |")
     L.append(f"| Scope 3 (기타 간접) | {_t(s3)} |")
     L.append(f"| **합계** | **{_t(total)}** |")
-    L.append("\n> Scope 2는 location-based 단일 산정이다. market-based(녹색프리미엄·REC·PPA) 미반영.\n")
+    L.append("\n> Scope 2는 location-based 단일 산정이다. market-based(녹색프리미엄·REC·PPA) 미반영.")
+    L.append("> Scope 1 연료는 **CO2 단독** 산정(CH4·N2O 미가산, 통상 <3%) — 합계는 계수별 GWP 기준이 혼재된 추정치다(부록 §5 참조).\n")
 
     L.append("## 2. Scope 3 카테고리별 (GHG Protocol 15개 프레임)\n")
     L.append("| # | 카테고리 | 상태 | 배출량 |")
@@ -127,7 +131,8 @@ def _write_md(path, records, review_queue, s1, s2, s3, total, period):
                  f"{f.get('confidence')} | {f.get('year','')} | {f.get('gwp_basis','')} | "
                  f"{f.get('source','')[:50]} | {f.get('note','')[:70]} |")
     L.append("\n> 비고의 '한계·누락'을 확인할 것. 예: 연료계수는 **CO2만 반영**(CH4·N2O 별도 가산 필요), "
-             "전력계수는 GWP기준 미확인 등 — 헤드라인 수치에 영향.")
+             "전력 WTT/T&D는 UK 프록시 등 — 헤드라인 수치에 영향. "
+             "(전력계수 0.4173은 gir 원문 검증 완료 — GWP=AR5.)")
 
     if review_queue:
         L.append("\n## 6. 검토 대기 (본 수치 미포함)\n")
