@@ -269,17 +269,30 @@ A제조 지분,상장주식,100000000,1000000000,500
 
 **검토 대기 건 되살리기**: `out/records.json`의 `review_queue`에서 어떤 게 왜 빠졌는지 봅니다. 사람이 값을 확인·교정해 `out/reviewed/` 폴더에 JSON 파일로 저장한 뒤 `carbonledger review out/`을 실행하면 합계에 다시 합쳐집니다(교정 건은 "human_corrected" 표시).
 
-교정 파일 형식 — `records.json`의 records[] 항목과 동일합니다. 예(`out/reviewed/fix1.json`):
+교정 파일 형식 — `records.json`의 records[] 항목 + **교정 이력**. 예(`out/reviewed/fix1.json`):
 ```json
 {
   "source_file": "전기_공장_202603.pdf",
   "scope": 2, "activity": "전력 사용",
   "factor_id": "electricity_kr", "factor_value": 0.4173, "factor_unit": "kgCO2eq/kWh",
   "activity_value": 1200, "activity_unit": "kWh",
-  "kgco2e": 500.76
+  "kgco2e": 500.76,
+  "review": {
+    "reviewer": "홍길동",
+    "reviewed_at": "2026-07-23",
+    "basis": "원증빙 재확인 — 고지서 2쪽 사용량 1,200kWh"
+  }
 }
 ```
 `kgco2e`는 계수×활동량을 직접 계산해 넣습니다(0.4173×1200=500.76). 파일 하나에 레코드 하나.
+
+**교정본도 검증 관문을 통과해야 합계에 들어갑니다**(자동 추출과 동일한 fail-closed 원칙):
+- `review`의 **교정자·교정일시·근거 3개는 필수** — 하나라도 없으면 반려되고 검토 대기로 남습니다
+- **계수 × 활동량 = 배출량** 산술이 맞아야 합니다(±1%) — 근거 없는 숫자를 총계에 넣을 수 없습니다
+- 필수 필드(source_file·scope)·배출량 부호도 검사합니다
+- 반려된 건은 화면에 사유가 표시되고 **집계에 반영되지 않습니다**
+
+교정으로 반영된 건은 리포트 **§6 「수기 교정 이력」** 에 교정자·일시·근거와 함께 표시되고, 전체 대비 비중도 나옵니다(xlsx 감사추적 시트에도 '수기교정' 열로). 사람이 손댄 수치가 자동 추출 수치와 섞여 구별 불가능해지지 않게 하기 위함입니다.
 
 ---
 

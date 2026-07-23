@@ -134,8 +134,23 @@ def _write_md(path, records, review_queue, s1, s2, s3, total, period):
              "전력 WTT/T&D는 UK 프록시 등 — 헤드라인 수치에 영향. "
              "(전력계수 0.4173은 gir 원문 검증 완료 — GWP=AR5.)")
 
+    # 수기 교정 이력 — 자동 추출 건과 구별되지 않으면 통제 흔적이 사라진다
+    corrected = [r for r in records if r.get("human_corrected")]
+    if corrected:
+        L.append("\n## 6. 수기 교정 이력 (사람이 값을 확인·수정해 합계에 반영한 건)\n")
+        L.append(f"아래 {len(corrected)}건은 자동 추출이 아니라 **사람이 교정**해 집계에 포함됐다. "
+                 "교정본도 검증 관문(필수필드·산술 일치·교정 이력)을 통과한 것만 반영된다.\n")
+        L.append("| 파일 | 활동 | 배출량(kg) | 교정자 | 교정일시 | 근거 |")
+        L.append("|---|---|---|---|---|---|")
+        for r in corrected:
+            rv = r.get("review") or {}
+            L.append(f"| {r.get('source_file','')} | {r.get('activity','')} | {r.get('kgco2e','')} | "
+                     f"{rv.get('reviewer','')} | {rv.get('reviewed_at','')} | {rv.get('basis','')} |")
+        L.append(f"\n> 수기 교정분 합계: {_t(sum(r.get('kgco2e', 0) or 0 for r in corrected))} "
+                 f"(전체의 {(sum(r.get('kgco2e',0) or 0 for r in corrected) / total * 100 if total else 0):.1f}%)\n")
+
     if review_queue:
-        L.append("\n## 6. 검토 대기 (본 수치 미포함)\n")
+        L.append("\n## 7. 검토 대기 (본 수치 미포함)\n")
         L.append("검증 관문을 통과 못해 집계에서 제외됐다. 교정 후 `carbonledger review`로 재집계.\n")
         L.append("| 파일 | 사유 |")
         L.append("|---|---|")
@@ -163,12 +178,16 @@ def _write_xlsx(path, records, review_queue, s1, s2, s3, total, period):
 
     wr = wb.create_sheet("건별_감사추적")
     wr.append(["파일", "Scope", "카테고리", "활동", "활동량", "활동단위",
-               "factor_id", "계수값", "계수단위", "배출량(kg)"])
+               "factor_id", "계수값", "계수단위", "배출량(kg)",
+               "수기교정", "교정자", "교정일시", "교정근거"])
     for r in records:
+        rv = r.get("review") or {}
         wr.append([r.get("source_file"), r.get("scope"), r.get("category"),
                    r.get("activity"), r.get("activity_value"), r.get("activity_unit"),
                    r.get("factor_id"), r.get("factor_value"), r.get("factor_unit"),
-                   r.get("kgco2e")])
+                   r.get("kgco2e"),
+                   "Y" if r.get("human_corrected") else "",
+                   rv.get("reviewer", ""), rv.get("reviewed_at", ""), rv.get("basis", "")])
 
     wf = wb.create_sheet("계수목록")
     wf.append(["factor_id", "값", "단위", "신뢰수준", "연도", "GWP기준", "출처", "출처URL"])

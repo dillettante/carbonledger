@@ -150,6 +150,40 @@ def validate_electricity(rec: dict) -> list[str]:
     return issues
 
 
+def validate_corrected_record(rec: dict) -> list[str]:
+    """수기 교정 레코드 검증 관문 — `review` 병합 전에 태운다.
+
+    추출 경로(validate_transport 등)는 문서유형별 원시 필드를 보지만, 교정본은
+    이미 산정이 끝난 '레코드'라 검사 대상이 다르다. 사람이 손으로 만든 JSON이
+    검증 없이 헤드라인 합계에 직행하는 우회로를 막는 것이 목적이다.
+
+    검사: 필수 필드 · 배출량 부호 · 계수×활동량=배출량 산술 일치 · 교정 이력(누가·언제·왜).
+    """
+    issues = []
+    if not (rec.get("source_file") or "").strip():
+        issues.append("source_file 누락 — 어느 건의 교정인지 특정 불가")
+    if rec.get("scope") not in (1, 2, 3):
+        issues.append(f"scope 이상: {rec.get('scope')!r} (1·2·3 중 하나)")
+
+    kg = _num(rec.get("kgco2e"))
+    if kg is None or kg < 0:
+        issues.append(f"배출량(kgco2e) 비정상: {rec.get('kgco2e')!r}")
+
+    # 계수·활동량이 있으면 산술 재현 확인 — 감사추적의 핵심 불변식
+    fv, av = _num(rec.get("factor_value")), _num(rec.get("activity_value"))
+    if kg is not None and fv is not None and av is not None:
+        expect = fv * av
+        if abs(expect - kg) > max(0.01, 0.01 * max(abs(kg), 1)):
+            issues.append(f"산술 불일치: 계수{fv}×활동량{av}={expect:.3f} vs 배출량 {kg}")
+
+    # 교정 이력 강제(통제) — 누가·언제·무엇을 근거로 고쳤는지 없으면 병합 거부
+    rv = rec.get("review") or {}
+    for k, label in (("reviewer", "교정자"), ("reviewed_at", "교정일시"), ("basis", "교정근거")):
+        if not str(rv.get(k, "")).strip():
+            issues.append(f"교정 이력 누락: review.{k}({label}) — 감사추적 필수")
+    return issues
+
+
 def _cross_check(issues, qty, price, amount, label):
     """수량 × 단가 ≈ 금액(±5%). 세 값이 다 있을 때만 검사."""
     if qty and price and amount:

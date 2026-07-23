@@ -174,6 +174,29 @@ def test_scope3_cat3_derivation_golden(tmp_path):
     assert total == round(50 * 0.61101 + 500 * 0.0459 + 500 * 0.0183, 3), f"cat3 파생 오류: {total}"
 
 
+def test_corrected_record_gate(tmp_path):
+    """수기 교정본도 검증 관문을 통과해야 — 무검증 직행 우회로 차단."""
+    from carbonledger import validate
+    good = {"source_file": "a.jpg", "scope": 2, "activity": "전력",
+            "factor_id": "electricity_kr", "factor_value": 0.4173,
+            "activity_value": 1200, "activity_unit": "kWh", "kgco2e": 500.76,
+            "review": {"reviewer": "홍길동", "reviewed_at": "2026-07-23", "basis": "원증빙 재확인"}}
+    assert validate.validate_corrected_record(good) == [], "정상 교정본은 통과해야"
+
+    # 산술 불일치(계수×활동량 ≠ 배출량) 적발 — 감사추적 불변식
+    bad = {**good, "kgco2e": 9999.0}
+    assert any("산술 불일치" in i for i in validate.validate_corrected_record(bad)), "산술 조작 미적발"
+
+    # 교정 이력 없으면 거부(통제)
+    no_hist = {k: v for k, v in good.items() if k != "review"}
+    iss = validate.validate_corrected_record(no_hist)
+    assert len([i for i in iss if "교정 이력 누락" in i]) == 3, "교정자·일시·근거 강제 실패"
+
+    # 음수 배출량·scope 이상
+    assert any("배출량" in i for i in validate.validate_corrected_record({**good, "kgco2e": -1}))
+    assert any("scope" in i for i in validate.validate_corrected_record({**good, "scope": 9}))
+
+
 def test_review_merge_idempotent(tmp_path):
     """review 재실행이 교정본을 이중 계상하지 않고, 교정된 건은 큐에서 빠져야."""
     records = [
@@ -212,7 +235,8 @@ if __name__ == "__main__":
                          (test_bill_date_null_fail_closed, True),
                          (test_scope3_freight_waste_golden, False),
                          (test_scope3_cat3_derivation_golden, False),
-                         (test_review_merge_idempotent, False)]:
+                         (test_review_merge_idempotent, False),
+                         (test_corrected_record_gate, False)]:
         with tempfile.TemporaryDirectory() as d:  # 테스트마다 새 tmp(충돌 방지)
             fn(Path(d), _P()) if needs_mp else fn(Path(d))
-    print("golden 테스트 11종 통과 ✅")
+    print("golden 테스트 12종 통과 ✅")

@@ -264,22 +264,42 @@ def cmd_review(a):
     queue = data.get("review_queue", [])
     reviewed_dir = out / "reviewed"
 
-    corrected = []
+    # 교정본 적재 + **검증 관문**(추출 경로와 동일하게 fail-closed).
+    # 관문을 안 태우면 사람이 손으로 만든 JSON이 무검증으로 헤드라인 합계에 직행한다.
+    corrected, rejected = [], []
     if reviewed_dir.is_dir():
         for jf in sorted(reviewed_dir.glob("*.json")):
-            c = json.loads(jf.read_text(encoding="utf-8"))
-            c["human_corrected"] = True   # 감사추적 표지
+            try:
+                c = json.loads(jf.read_text(encoding="utf-8"))
+            except Exception as e:
+                rejected.append({"source_file": jf.name, "issues": [f"JSON 파싱 실패: {e}"]})
+                continue
+            issues = validate.validate_corrected_record(c)
+            if issues:
+                rejected.append({"source_file": c.get("source_file") or jf.name,
+                                 "issues": [f"교정본 반려({jf.name}): {i}" for i in issues]})
+                continue
+            c["human_corrected"] = True   # 감사추적 표지(리포트 §6-B에 노출됨)
             corrected.append(c)
+
+    if rejected:
+        print(f"⚠️ 교정본 {len(rejected)}건 반려(합계 미반영):")
+        for r in rejected:
+            for i in r["issues"]:
+                print(f"  - {i}")
+        print()
 
     if not corrected:
         print(f"검토 대기 {len(queue)}건. 교정하려면 각 건을 아래 형식으로 "
               f"{reviewed_dir}/*.json 에 저장 후 재실행:")
         for q in queue:
             print(f"  - {q.get('source_file')}: {'; '.join(q.get('issues', []))}")
-        print("\n(교정 레코드 형식은 records.json의 records[] 항목과 동일 + kgco2e 계산값)")
+        print("\n(교정 레코드 형식: records.json의 records[] 항목 + kgco2e 계산값 + "
+              "review{reviewer, reviewed_at, basis})")
         return
 
     merged, remaining = _merge_reviewed(data["records"], queue, corrected)
+    remaining += rejected  # 반려분은 검토 대기로 남긴다(조용히 사라지지 않음)
     report.build(merged, remaining, str(out), period=data.get("period"))
     print(f"교정 {len(corrected)}건 병합 재집계 완료 → {out}/report.md "
           f"(잔여 검토대기 {len(remaining)}건)")
