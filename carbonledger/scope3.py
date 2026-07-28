@@ -133,8 +133,12 @@ def process_pcaf(csv_path: Path, records: list, queue: list):
     """카테고리 15(투자) — PCAF 귀속공식. 금융배출량 = 귀속계수 × 피투자 배출.
 
     행 스키마: asset(자산명), asset_class, outstanding(투자·대출 잔액),
-               denominator(EVIC 또는 총자본+부채), investee_emissions(피투자 tCO2e).
+               denominator(EVIC 또는 총자본+부채), investee_emissions(피투자 tCO2e),
+               emissions_source(피투자 배출량의 출처 — 공시·산정보고서 등).
     귀속계수 = outstanding / denominator. financed = 귀속계수 × investee_emissions.
+
+    피투자 배출량은 레지스트리 계수가 아니라 사용자가 가져오는 수치이므로,
+    다른 사용자 입력 계수(spend·scope3 CSV)와 동일하게 **출처를 기록**한다.
     """
     with csv_path.open(encoding="utf-8") as fh:
         for i, row in enumerate(csv.DictReader(fh), 1):
@@ -149,11 +153,15 @@ def process_pcaf(csv_path: Path, records: list, queue: list):
                     raise ValueError("잔액·분모는 양수")
                 attribution = out / denom
                 inv_kg = inv * 1000  # 피투자 배출 tCO2e → kg (감사 불변식: 계수×활동량=배출량)
+                # 출처 미기재는 거부하지 않되(기존 입력 호환) 그 사실을 레코드에 남긴다 —
+                # 리포트 §4에 "출처 미기재"로 드러나므로 조용히 사라지지 않는다.
+                esrc = (row.get("emissions_source") or "").strip() or "출처 미기재(피투자 배출량)"
                 records.append({
                     "source_file": src_id, "scope": 3, "category": 15,
                     "activity": f"투자 {row.get('asset','')} ({row.get('asset_class','')})",
                     "factor_id": "pcaf_financed", "factor_value": round(attribution, 6),
                     "factor_unit": "귀속계수(잔액/기업가치)",
+                    "factor_source": f"PCAF 귀속공식 · 피투자 배출량 출처: {esrc}",
                     "activity_value": round(inv_kg, 3), "activity_unit": "kgCO2eq(피투자)",
                     "kgco2e": round(attribution * inv_kg, 3),  # 귀속계수 × 피투자배출(kg)
                     "extracted": row,

@@ -74,38 +74,66 @@ def _t(kg: float) -> str:
     return f"{kg/1000:,.3f} tCO2eq ({kg:,.1f} kg)"
 
 
+def _pct(part: float, whole: float) -> str:
+    return f"{part / whole * 100:.2f}%" if whole else "—"
+
+
 def _write_md(path, records, review_queue, s1, s2, s3, total, period):
     L = []
     L.append(f"# 조직 온실가스 배출량 리포트")
     L.append(f"\n- 보고기간: **{period or '전체(미지정)'}**  · 생성일: {date.today()}")
     L.append(f"- 자동 산정 건수: {len(records)}  · 검토 대기(미포함): {len(review_queue)}\n")
 
-    L.append("## 1. 총괄 — 조직 탄소발자국\n")
-    L.append("| 구분 | 배출량 |")
-    L.append("|---|---|")
-    L.append(f"| Scope 1 (직접) | {_t(s1)} |")
-    L.append(f"| Scope 2 (전력, location-based) | {_t(s2)} |")
-    L.append(f"| Scope 3 (기타 간접) | {_t(s3)} |")
-    L.append(f"| **합계** | **{_t(total)}** |")
-    L.append("\n> Scope 2는 location-based 단일 산정이다. market-based(녹색프리미엄·REC·PPA) 미반영.")
+    L.append("## 1. 총괄 — 조직 온실가스 배출량\n")
+    L.append("| 구분 | 배출량 | 비중 |")
+    L.append("|---|---|---|")
+    L.append(f"| Scope 1 (직접) | {_t(s1)} | {_pct(s1, total)} |")
+    L.append(f"| Scope 2 (전력, location-based) | {_t(s2)} | {_pct(s2, total)} |")
+    # 실무 데이터표(예: 지속가능경영보고서 ESG 데이터)의 굵은 '온실가스 배출량' 행은
+    # 예외 없이 Scope 1+2다 — 규제 대상·감축목표·원단위 분자가 모두 S1+2이기 때문.
+    # S1+2+3만 굵게 내면 Scope 3가 지배적일 때 헤드라인이 오도된다.
+    L.append(f"| **소계 (Scope 1+2)** | **{_t(s1 + s2)}** | {_pct(s1 + s2, total)} |")
+    L.append(f"| Scope 3 (기타 간접) | {_t(s3)} | {_pct(s3, total)} |")
+    L.append(f"| **총계 (Scope 1+2+3)** | **{_t(total)}** | 100% |")
+    L.append("\n> **소계(Scope 1+2)** 는 규제·감축목표·원단위 산정의 통상 기준이고, "
+             "**총계(Scope 1+2+3)** 는 밸류체인 전체 발자국이다. 용도에 맞는 수치를 인용할 것.")
+    L.append("> Scope 2는 location-based 단일 산정이다. market-based(녹색프리미엄·REC·PPA) 미반영.")
     L.append("> Scope 1 연료는 **CO2 단독** 산정(CH4·N2O 미가산, 통상 <3%) — 합계는 계수별 GWP 기준이 혼재된 추정치다(부록 §5 참조).\n")
 
     L.append("## 2. Scope 3 카테고리별 (GHG Protocol 15개 프레임)\n")
-    L.append("| # | 카테고리 | 상태 | 배출량 |")
-    L.append("|---|---|---|---|")
+    L.append("| # | 카테고리 | 상태 | 배출량 | 산정방법 |")
+    L.append("|---|---|---|---|---|")
     cats = _load_cats()
+    s3_total = _sum(records, scope=3)
     for i in range(1, 16):
         c = cats[str(i)]
         has = any(r.get("scope") == 3 and r.get("category") == i for r in records)
         if has:
-            status, val = "측정", _t(_sum(records, scope=3, category=i))
+            v = _sum(records, scope=3, category=i)
+            # Scope 3 내 비중 5% 초과는 SBTi 넷제로 표준 2.0의 목표 포함 기준선이자
+            # ISO 14064-1 5.2.3 '유의한 간접배출' 판단의 실무 참고점 — 눈에 띄게 표시한다.
+            share = (v / s3_total * 100) if s3_total else 0
+            flag = " **▲5%↑**" if share > 5 else ""
+            status = f"측정 ({share:.1f}%{flag})"
+            val = _t(v)
+            method = str(c.get("method", "")).replace("|", "\\|")
         else:
             # 입력 없는 카테고리는 자동화 여부 무관하게 '미측정' + 측정법 안내(0을 측정으로 오독 방지)
-            m = c.get("method", c.get("guidance", ""))[:45]
             who = c.get("applies_to", "")
             status = "미측정"
-            val = f"측정법: {m}" + (f" · 해당: {who[:20]}" if who else "")
-        L.append(f"| {i} | {c['name']} | {status} | {val} |")
+            val = "— (입력 없음)" + (f" · 해당: {who[:20]}" if who else "")
+            method = str(c.get("method", c.get("guidance", ""))).replace("|", "\\|")
+        L.append(f"| {i} | {c['name']} | {status} | {val} | {method} |")
+
+    # 산정 카테고리 명세 — 실무 공시가 각주로 "12개 카테고리: 1,2,…"를 밝히는 것과 같은 취지.
+    # 단 '제외'인지 '미수집'인지는 조직 판단이라 툴이 단정하지 않는다.
+    measured = [i for i in range(1, 16)
+                if any(r.get("scope") == 3 and r.get("category") == i for r in records)]
+    ms = ", ".join(map(str, measured)) or "없음"
+    L.append(f"\n> **산정 카테고리: 15개 중 {len(measured)}개** ({ms}). "
+             "나머지는 입력이 없어 산정되지 않았을 뿐이며, **해당 없음(제외)인지 미수집인지는 "
+             "이 툴이 판정하지 않는다** — 조직이 제외 사유를 별도 기재해야 한다"
+             "(ISO 14064-1 5.2.3·9.3.1 i / SBTi 2.0은 제외의 정량 근거를 요구).\n")
 
     L.append("\n## 3. Scope 1·2 미측정 배출원 (부분집계 고지)\n")
     L.append("아래는 본 툴이 자동 산정하지 않는다. 헤드라인 합계는 이 항목을 **제외**한 부분집계다.\n")
@@ -115,29 +143,54 @@ def _write_md(path, records, review_queue, s1, s2, s3, total, period):
         L.append(f"| {sc} | {src} | {how} |")
 
     L.append("\n## 4. 건별 명세 (감사추적)\n")
-    L.append("| 파일 | Scope | 활동 | 활동량 | 계수 | 배출량(kg) |")
-    L.append("|---|---|---|---|---|---|")
+    L.append("| 파일 | Scope | 활동 | 활동량 | 계수 | 계수 출처 | 배출량(kg) |")
+    L.append("|---|---|---|---|---|---|---|")
     for r in records:
+        # 사용자 입력 계수(user_factor·pcaf_financed)는 레지스트리에 출처가 없으므로
+        # 행 자체가 출처를 들고 다닌다. 이 열이 없으면 §5 부록의 "행별 출처 참조" 안내가
+        # 가리킬 곳이 없어진다(죽은 포인터).
+        src = str(r.get("factor_source", "") or "").replace("|", "\\|")
         L.append(f"| {r.get('source_file','')} | S{r.get('scope','')} | "
                  f"{r.get('activity','')} | {r.get('activity_value','')} {r.get('activity_unit','')} | "
-                 f"`{r.get('factor_id','')}` | {r.get('kgco2e','')} |")
+                 f"`{r.get('factor_id','')}` | {src} | {r.get('kgco2e','')} |")
 
+    _n = [5]  # 이후 절은 조건부 출력이라 번호를 동적으로 매긴다(하드코딩 시 §5→§7 드리프트)
     L.append("\n## 5. 사용된 배출계수 · 출처 (부록)\n")
     used = factors.all_used(r.get("factor_id") for r in records)
+
+    # 계수 신뢰수준 구성 — 헤드라인의 몇 %가 권위 계수이고 몇 %가 사용자 입력인가.
+    # 검증인·독자가 가장 먼저 묻는 질문이라 표 앞에 배치한다.
+    by_conf = {}
+    for r in records:
+        fid = r.get("factor_id")
+        conf = next((f.get("confidence", "미상") for f in used if f["id"] == fid), "미상")
+        by_conf[conf] = by_conf.get(conf, 0) + (r.get("kgco2e", 0) or 0)
+    if by_conf and total:
+        parts = " · ".join(f"{k} {v/total*100:.1f}%"
+                           for k, v in sorted(by_conf.items(), key=lambda x: -x[1]))
+        L.append(f"**계수 신뢰수준 구성(배출량 기준)**: {parts}\n")
+
     L.append("| factor_id | 값 | 단위 | 신뢰수준 | 연도 | GWP | 출처 | 비고(한계·누락) |")
     L.append("|---|---|---|---|---|---|---|---|")
     for f in used:
+        # 절단 금지 — 출처의 공표시점·고시번호와 비고의 한계가 잘려나가면
+        # 이 부록의 존재 이유(추적 가능성)가 사라진다. 표 파이프만 이스케이프.
+        src = str(f.get("source", "")).replace("|", "\\|")
+        note = str(f.get("note", "")).replace("|", "\\|")
         L.append(f"| `{f['id']}` | {f.get('value')} | {f.get('unit')} | "
                  f"{f.get('confidence')} | {f.get('year','')} | {f.get('gwp_basis','')} | "
-                 f"{f.get('source','')[:50]} | {f.get('note','')[:70]} |")
+                 f"{src} | {note} |")
     L.append("\n> 비고의 '한계·누락'을 확인할 것. 예: 연료계수는 **CO2만 반영**(CH4·N2O 별도 가산 필요), "
              "전력 WTT/T&D는 UK 프록시 등 — 헤드라인 수치에 영향. "
              "(전력계수 0.4173은 gir 원문 검증 완료 — GWP=AR5.)")
+    L.append("> `user_factor`·`pcaf_financed`는 레지스트리 계수가 아니라 **사용자가 입력한 계수**다 — "
+             "행별 출처는 §4 건별 명세의 '계수 출처' 열 참조.")
 
     # 수기 교정 이력 — 자동 추출 건과 구별되지 않으면 통제 흔적이 사라진다
     corrected = [r for r in records if r.get("human_corrected")]
     if corrected:
-        L.append("\n## 6. 수기 교정 이력 (사람이 값을 확인·수정해 합계에 반영한 건)\n")
+        _n[0] += 1
+        L.append(f"\n## {_n[0]}. 수기 교정 이력 (사람이 값을 확인·수정해 합계에 반영한 건)\n")
         L.append(f"아래 {len(corrected)}건은 자동 추출이 아니라 **사람이 교정**해 집계에 포함됐다. "
                  "교정본도 검증 관문(필수필드·산술 일치·교정 이력)을 통과한 것만 반영된다.\n")
         L.append("| 파일 | 활동 | 배출량(kg) | 교정자 | 교정일시 | 근거 |")
@@ -150,7 +203,8 @@ def _write_md(path, records, review_queue, s1, s2, s3, total, period):
                  f"(전체의 {(sum(r.get('kgco2e',0) or 0 for r in corrected) / total * 100 if total else 0):.1f}%)\n")
 
     if review_queue:
-        L.append("\n## 7. 검토 대기 (본 수치 미포함)\n")
+        _n[0] += 1
+        L.append(f"\n## {_n[0]}. 검토 대기 (본 수치 미포함)\n")
         L.append("검증 관문을 통과 못해 집계에서 제외됐다. 교정 후 `carbonledger review`로 재집계.\n")
         L.append("| 파일 | 사유 |")
         L.append("|---|---|")
@@ -178,14 +232,14 @@ def _write_xlsx(path, records, review_queue, s1, s2, s3, total, period):
 
     wr = wb.create_sheet("건별_감사추적")
     wr.append(["파일", "Scope", "카테고리", "활동", "활동량", "활동단위",
-               "factor_id", "계수값", "계수단위", "배출량(kg)",
+               "factor_id", "계수값", "계수단위", "계수출처", "배출량(kg)",
                "수기교정", "교정자", "교정일시", "교정근거"])
     for r in records:
         rv = r.get("review") or {}
         wr.append([r.get("source_file"), r.get("scope"), r.get("category"),
                    r.get("activity"), r.get("activity_value"), r.get("activity_unit"),
                    r.get("factor_id"), r.get("factor_value"), r.get("factor_unit"),
-                   r.get("kgco2e"),
+                   r.get("factor_source", ""), r.get("kgco2e"),
                    "Y" if r.get("human_corrected") else "",
                    rv.get("reviewer", ""), rv.get("reviewed_at", ""), rv.get("basis", "")])
 

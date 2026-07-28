@@ -65,7 +65,7 @@ def all_used(factor_ids) -> list[dict]:
                 r = dict(reg[fid])
             else:
                 r = {"value": "행별", "unit": "", "confidence": "사용자입력",
-                     "source": "행별 factor_source 참조(건별 명세)"}
+                     "source": "사용자 입력 계수 — 행별 출처는 §4 건별 명세의 '계수 출처' 열"}
             r["id"] = fid
             out.append(r)
     return out
