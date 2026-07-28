@@ -229,10 +229,10 @@ item,activity,unit,factor_id,factor,factor_source
 ### 1-E. scope3/cat15_*.csv (투자 — 금융기관용)
 투자는 계산이 달라서 전용 형식(PCAF 방법)입니다:
 ```csv
-asset,asset_class,outstanding,denominator,investee_emissions
+asset,asset_class,outstanding,denominator,investee_emissions,emissions_source
 A제조 지분,상장주식,100000000,1000000000,500
 ```
-- `outstanding`=투자·대출 잔액, `denominator`=기업가치(상장=EVIC, 대출=총자본+부채), `investee_emissions`=그 회사 배출량(**tCO2e**).
+- `outstanding`=투자·대출 잔액, `denominator`=기업가치(상장=EVIC, 대출=총자본+부채), `investee_emissions`=그 회사 배출량(**tCO2e**), `emissions_source`=그 배출량을 어디서 얻었는지(공시치·검증본 등). **출처를 비우면 리포트에 '출처 미기재'로 표시된다** — 다른 사용자 입력 계수와 같은 원칙.
 - 계산: (잔액÷기업가치) × 그 회사 배출량 = 우리에게 귀속되는 금융배출.
 
 ### 1-F. 카테고리 3은 넣을 것 없음

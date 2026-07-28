@@ -119,7 +119,7 @@ carbonledger run examples/input --period 2026 --out examples/out
 - **commute.csv** (통근): `employee_id,mode,factor_id,oneway_km,workdays` — factor_id는 통근 수단 5종 중 하나.
 - **spend.csv** (구매): `item,krw,factor,factor_source` — 한국 공개 지출계수표 부재로 **계수·출처를 직접 입력**(출처 없으면 review 큐).
 - **scope3/cat{N}_*.csv** (나머지 카테고리 2·4·5·8~14): 통일 스키마 `item,activity,unit,factor_id,factor,factor_source` — 레지스트리 계수(freight·waste 등) 또는 사용자 계수.
-- **scope3/cat15_*.csv** (투자): PCAF 공식 — `asset,asset_class,outstanding,denominator,investee_emissions`.
+- **scope3/cat15_*.csv** (투자): PCAF 공식 — `asset,asset_class,outstanding,denominator,investee_emissions,emissions_source`.
 - **카테고리 3**(연료·에너지 관련)은 입력 없음 — Scope 1·2에서 자동 파생.
 
 작성 예시는 [`examples/input/`](examples/input)에 카테고리별로 있다. 열 정의·단위 규칙·주의사항 전체는 **[PLAYBOOK.md](PLAYBOOK.md)** 가 유일한 상세 원본이다.
