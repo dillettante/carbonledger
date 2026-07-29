@@ -7,7 +7,8 @@
     ├── travel/           # 출장 승차권·항공권·숙박 영수증 → Scope 3 cat.6
     ├── commute.csv       # 통근 설문 → Scope 3 cat.7
     ├── spend.csv         # 구매 지출(사용자 계수 포함) → Scope 3 cat.1
-    └── scope3/           # 나머지 카테고리 cat{N}_*.csv (2·4·5·8~15)
+    ├── scope3/           # 나머지 카테고리 cat{N}_*.csv (2·4·5·8~15)
+    └── inventory.json    # (선택) 조직 선언 — 조직명·경계·연결기준·제외 사유
 
 명령:
     carbonledger run <입력폴더> [--period 2026] [--model 모델명] [--out OUT]
@@ -23,7 +24,7 @@ import re
 import sys
 from pathlib import Path
 
-from . import calc, diff, extract, report, scope3, validate
+from . import calc, diff, extract, inventory, report, scope3, validate
 
 _IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".pdf"}
 
@@ -246,8 +247,13 @@ def cmd_run(a):
     # 카테고리 3(연료·에너지 관련) — Scope 1·2 산정 후 파생(WTT/T&D 계수 있을 때만)
     scope3.derive_category3(records, queue)
 
+    inv = inventory.load(root)
+    if inv:
+        for w in inventory.check(inv):
+            print(f"[선언 확인] {w}")
+
     out = a.out or str(root / "out")
-    summary = report.build(records, queue, out, period=a.period)
+    summary = report.build(records, queue, out, period=a.period, inv=inv)
     print(f"\n리포트 생성: {out}/report.md · report.xlsx · records.json")
     print(f"  Scope1 {summary['scope1']} / Scope2 {summary['scope2']} / "
           f"Scope3 {summary['scope3']} kg  → 합계 {summary['total_kgco2e']} kgCO2eq")
@@ -301,7 +307,8 @@ def cmd_review(a):
 
     merged, remaining = _merge_reviewed(data["records"], queue, corrected)
     remaining += rejected  # 반려분은 검토 대기로 남긴다(조용히 사라지지 않음)
-    report.build(merged, remaining, str(out), period=data.get("period"))
+    report.build(merged, remaining, str(out), period=data.get("period"),
+                 inv=data.get("inventory"))
     print(f"교정 {len(corrected)}건 병합 재집계 완료 → {out}/report.md "
           f"(잔여 검토대기 {len(remaining)}건)")
 
@@ -347,7 +354,8 @@ def cmd_diff(a):
 def cmd_selftest(a):
     from . import factors
     factors.selftest(); calc.selftest(); extract.selftest()
-    validate.selftest(); scope3.selftest(); diff.selftest(); report.selftest()
+    validate.selftest(); scope3.selftest(); diff.selftest()
+    inventory.selftest(); report.selftest()
     print("\n전 모듈 selftest 통과 ✅ (네트워크 없음)")
 
 

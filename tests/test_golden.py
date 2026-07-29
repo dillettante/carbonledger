@@ -254,6 +254,48 @@ def test_diff_basis_and_decomposition(tmp_path):
     assert fd["계수효과"] > 0 > fd["활동량효과"], "상반된 효과를 구분 못함"
 
 
+def test_inventory_declaration_in_report(tmp_path):
+    """조직 선언이 리포트 §0에 전재되고, records.json에도 남는가.
+
+    선언이 없을 때 리포트가 그 사실을 적는지도 함께 본다 — 조직명 없는 배출량 표가
+    인벤토리 보고서처럼 보이면 안 된다.
+    """
+    import json
+
+    from carbonledger import inventory, report
+
+    recs = [{"source_file": "a.png", "scope": 2, "category": None, "activity": "전력",
+             "factor_id": "electricity_kr", "activity_value": 1000, "activity_unit": "kWh",
+             "kgco2e": 417.3}]
+
+    # 예제 선언 파일이 실제로 로드되는가(스키마 드리프트 방지)
+    ex_dir = Path(__file__).resolve().parents[1] / "examples" / "input"
+    inv = inventory.load(ex_dir)
+    assert inv and inv["organization"] == "(주)예시상사"
+    assert inventory.check(inv) == [], f"예제 선언에 경고: {inventory.check(inv)}"
+
+    out = tmp_path / "with"
+    report.build(recs, [], str(out), period="2026", inv=inv)
+    md = (out / "report.md").read_text(encoding="utf-8")
+    assert "## 0. 조직 선언" in md
+    assert "(주)예시상사" in md and "운영통제" in md
+    assert "해외 판매법인 3곳" in md, "제외 사유 미전재"
+    # 선언은 §1 총괄보다 앞에 와야 한다(숫자를 읽기 전에 그 숫자의 범위를 본다)
+    assert md.index("## 0. 조직 선언") < md.index("## 1. 총괄")
+    # 설명용 `_` 키는 리포트에 새지 않는다
+    assert "_연결기준_설명" not in md
+    # 감사추적 원장에도 선언이 박제된다
+    led = json.loads((out / "records.json").read_text(encoding="utf-8"))
+    assert led["inventory"]["consolidation_approach"] == "운영통제"
+
+    # 선언 없음 — 그 사실을 적되 'ISO 필수' 같은 라벨은 붙이지 않는다
+    out2 = tmp_path / "without"
+    report.build(recs, [], str(out2), period="2026", inv=None)
+    md2 = (out2 / "report.md").read_text(encoding="utf-8")
+    assert "## 0. 조직 선언" in md2 and "없다" in md2
+    assert json.loads((out2 / "records.json").read_text(encoding="utf-8"))["inventory"] is None
+
+
 if __name__ == "__main__":
     import tempfile
 
@@ -271,7 +313,8 @@ if __name__ == "__main__":
                          (test_scope3_cat3_derivation_golden, False),
                          (test_review_merge_idempotent, False),
                          (test_corrected_record_gate, False),
-                         (test_diff_basis_and_decomposition, False)]:
+                         (test_diff_basis_and_decomposition, False),
+                         (test_inventory_declaration_in_report, False)]:
         with tempfile.TemporaryDirectory() as d:  # 테스트마다 새 tmp(충돌 방지)
             fn(Path(d), _P()) if needs_mp else fn(Path(d))
-    print("golden 테스트 13종 통과 ✅")
+    print("golden 테스트 14종 통과 ✅")

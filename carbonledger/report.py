@@ -10,7 +10,7 @@ import json
 from datetime import date
 from pathlib import Path
 
-from . import factors
+from . import factors, inventory
 
 _CATS = Path(__file__).parent / "data" / "categories.json"
 
@@ -44,7 +44,7 @@ def _sum(records, scope=None, category=None) -> float:
 
 
 def build(records: list[dict], review_queue: list[dict], out_dir: str,
-          period: str | None = None) -> dict:
+          period: str | None = None, inv: dict | None = None) -> dict:
     """레코드 → 리포트 3종 생성. 반환: 요약 dict(총량 등)."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -60,10 +60,11 @@ def build(records: list[dict], review_queue: list[dict], out_dir: str,
         json.dumps({"period": period, "generated": str(date.today()),
                     "tool_version": __version__,
                     "factors_version": factors.meta().get("version", ""),
+                    "inventory": inv,
                     "records": records, "review_queue": review_queue},
                    ensure_ascii=False, indent=2), encoding="utf-8")
 
-    _write_md(out / "report.md", records, review_queue, s1, s2, s3, total, period)
+    _write_md(out / "report.md", records, review_queue, s1, s2, s3, total, period, inv)
     _write_xlsx(out / "report.xlsx", records, review_queue, s1, s2, s3, total, period)
 
     return {"scope1": s1, "scope2": s2, "scope3": s3, "total_kgco2e": total,
@@ -78,11 +79,13 @@ def _pct(part: float, whole: float) -> str:
     return f"{part / whole * 100:.2f}%" if whole else "—"
 
 
-def _write_md(path, records, review_queue, s1, s2, s3, total, period):
+def _write_md(path, records, review_queue, s1, s2, s3, total, period, inv=None):
     L = []
     L.append(f"# 조직 온실가스 배출량 리포트")
     L.append(f"\n- 보고기간: **{period or '전체(미지정)'}**  · 생성일: {date.today()}")
     L.append(f"- 자동 산정 건수: {len(records)}  · 검토 대기(미포함): {len(review_queue)}\n")
+
+    L += inventory.render_md(inv)
 
     L.append("## 1. 총괄 — 조직 온실가스 배출량\n")
     L.append("| 구분 | 배출량 | 비중 |")

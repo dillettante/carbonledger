@@ -54,6 +54,8 @@ LLM은 **Claude·ChatGPT 등(상용)** 또는 **LM Studio, Ollama 등(로컬)** 
 
 **Scope 귀속은 폴더가 선언한다.** 같은 주유 영수증도 법인차면 Scope 1, 개인차 출장이면 Scope 3-6, 통근이면 3-7이다 — AI가 추측하지 않는다. 어느 폴더에 넣을지는 [`carbonledger/data/boundary.md`](carbonledger/data/boundary.md)의 조직경계 안내를 따른다.
 
+**조직경계도 조직이 선언한다.** 배출량은 툴이 계산하지만 *그 숫자가 무엇에 대한 숫자인지*(어느 법인·사업장을 포함했는지, 연결기준이 운영통제인지 지분율인지, 무엇을 왜 뺐는지)는 조직만 안다. `input/inventory.json`에 적으면 리포트 §0에 **그대로 전재**되고, 없으면 리포트가 "조직 선언 없음"이라고 적는다. 툴은 그 선언의 적정성을 판정하지 않는다 — [`examples/input/inventory.json`](examples/input/inventory.json) 참조.
+
 ## 설치
 
 ```bash
@@ -97,7 +99,8 @@ input/
 ├── scope2-energy/     # 전기 고지서
 ├── travel/            # 출장 승차권·항공권·숙박 영수증
 ├── commute.csv        # 통근 설문
-└── spend.csv          # 구매 지출(사용자 계수 포함)
+├── spend.csv          # 구매 지출(사용자 계수 포함)
+└── inventory.json     # (선택) 조직 선언 — 조직명·경계·연결기준·제외 사유
 
 # 실행 (보고기간 지정 권장 — 그 해의 발자국만 집계)
 carbonledger run input/ --period 2026 --out out/
