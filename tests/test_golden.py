@@ -220,6 +220,40 @@ def test_review_merge_idempotent(tmp_path):
     assert sum(r["kgco2e"] for r in merged3) == 1199.0, "교정본이 원본을 대체하지 않음"
 
 
+def test_diff_basis_and_decomposition(tmp_path):
+    """두 실행 대조 — 기준 변화 검출 + 활동량/계수 요인분해 골든값.
+
+    실제 공시(KCC)에서 활동량 -17.4%인데 배출 -6.05%여서 실효계수가 +13.7% 오른
+    사례가 설명 없이 보고됐다. 그 구분이 자동으로 나오는지 검증한다.
+    """
+    from carbonledger import diff
+    prev = {"period": "2025", "factors_version": "0.1.0", "records": [
+        {"scope": 1, "factor_id": "fuel_diesel", "factor_value": 2.577,
+         "activity_value": 1000, "kgco2e": 2577.0},
+        {"scope": 3, "category": 12, "factor_id": "waste_plastic_landfill",
+         "factor_value": 8.88386, "activity_value": 3, "kgco2e": 26.652},
+    ]}
+    curr = {"period": "2026", "factors_version": "0.2.0", "records": [
+        # 활동량 -17.4%, 계수 +13.7% (KCC 카테고리 1 역설 재현)
+        {"scope": 1, "factor_id": "fuel_diesel", "factor_value": 2.93,
+         "activity_value": 826, "kgco2e": 2420.18},
+    ]}
+    d = diff.compare(prev, curr)
+
+    # 기준 변화가 전부 잡혀야
+    assert any(b["항목"] == "계수판 버전" for b in d["basis"]), "계수판 변경 미검출"
+    assert d["categories_removed"] == [12], "산정 중단 카테고리 미검출"
+    assert any(f["factor_id"] == "fuel_diesel" for f in d["factors_changed"]), "계수값 변경 미검출"
+
+    # 활동량 효과 = (826-1000)×2.577 = -448.4 / 계수 효과 = 826×(2.93-2.577) = +291.6
+    fd = next(x for x in d["decomposition"] if x["factor_id"] == "fuel_diesel")
+    assert abs(fd["활동량효과"] - (-448.398)) < 0.1, f"활동량 효과: {fd['활동량효과']}"
+    assert abs(fd["계수효과"] - 291.578) < 0.1, f"계수 효과: {fd['계수효과']}"
+    assert abs(fd["활동량효과"] + fd["계수효과"] - fd["배출증감"]) < 0.01, "분해 합 불일치"
+    # 상반된 두 효과를 갈라내야(계수가 감소를 상쇄)
+    assert fd["계수효과"] > 0 > fd["활동량효과"], "상반된 효과를 구분 못함"
+
+
 if __name__ == "__main__":
     import tempfile
 
@@ -236,7 +270,8 @@ if __name__ == "__main__":
                          (test_scope3_freight_waste_golden, False),
                          (test_scope3_cat3_derivation_golden, False),
                          (test_review_merge_idempotent, False),
-                         (test_corrected_record_gate, False)]:
+                         (test_corrected_record_gate, False),
+                         (test_diff_basis_and_decomposition, False)]:
         with tempfile.TemporaryDirectory() as d:  # 테스트마다 새 tmp(충돌 방지)
             fn(Path(d), _P()) if needs_mp else fn(Path(d))
-    print("golden 테스트 12종 통과 ✅")
+    print("golden 테스트 13종 통과 ✅")

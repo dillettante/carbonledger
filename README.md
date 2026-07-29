@@ -24,6 +24,7 @@ LLM은 **Claude·ChatGPT 등(상용)** 또는 **LM Studio, Ollama 등(로컬)** 
 | 기밀 증빙 | — | 업체 서버 전송 | **로컬 LLM이면 유출 없음** |
 | 계수 출처 | 대개 비공개 | 대개 비공개 | **전량 공개·리포트에 자동 부록** |
 | 오추출 방어 | — | — | **검증 관문 + 검토 큐(fail-closed)** |
+| 전년 대비 | 값만 나열 | 값만 나열 | **기준 변화 검출 + 요인분해**(`diff`) |
 | 비용 | 무료 | 유료 구독 | 무료(오픈소스) |
 
 > ⚠️ **먼저 읽을 것** — 산출물은 **추정치**다. 배출권거래제·목표관리제 명세서 등 규제 신고 자료가 아니다. 거리기반·지출기반 산정은 명세서 방법론과 다르고, 일부 계수는 해외정부공식·학술·사용자입력 등급이다. 신고 전 소관기관(gir.go.kr / 한국환경공단)의 확정계수로 재검증할 것. (계수별 출처·신뢰수준은 리포트 부록과 `carbonledger/data/factors.json`에 명시.)
@@ -104,6 +105,9 @@ carbonledger run input/ --period 2026 --out out/
 # 검토 대기 조회 + 교정본 병합 재집계
 carbonledger review out/
 
+# 전년 대비 대조 — 배출량보다 '산정 기준' 변화를 먼저 낸다
+carbonledger diff 작년/records.json out/records.json --out 대조.md
+
 # 네트워크 없이 전 모듈 검증
 carbonledger selftest
 ```
@@ -168,6 +172,7 @@ carbonledger/
 ├── factors.py    # 배출계수 레지스트리 로더(단위 검사)
 ├── calc.py       # Scope별 산정 + 거리
 ├── scope3.py     # Scope 3 카테고리 2~15 통일 CSV 어댑터 + cat3 파생 + cat15 PCAF
+├── diff.py       # 두 실행 대조 — 기준 변화 검출 + 활동량/계수 요인분해
 ├── report.py     # md·xlsx·records.json
 └── data/         # factors.json · stations.json · categories.json · boundary.md
 ```

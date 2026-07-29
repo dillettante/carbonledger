@@ -13,6 +13,7 @@
     carbonledger run <입력폴더> [--period 2026] [--model 모델명] [--out OUT]
     carbonledger selftest        # 네트워크 없이 전 모듈 검증
     carbonledger review <OUT>    # 검토 큐 조회 + reviewed/*.json 병합 재집계
+    carbonledger diff <이전> <이번> [--out DIFF.md]   # 두 실행 대조(기준 변화·요인분해)
 
 LLM 백엔드: CARBONLEDGER_BACKEND = lmstudio(기본·로컬) | ollama(로컬) | openai | anthropic (extract.py 참조).
 """
@@ -22,7 +23,7 @@ import re
 import sys
 from pathlib import Path
 
-from . import calc, extract, report, scope3, validate
+from . import calc, diff, extract, report, scope3, validate
 
 _IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".pdf"}
 
@@ -318,10 +319,35 @@ def _merge_reviewed(records, queue, corrected):
     return base + corrected, remaining
 
 
+def cmd_diff(a):
+    """두 실행 대조 — 배출량보다 **산정 기준**의 변화를 먼저 낸다.
+
+    실제 공시에서 카테고리 집합·계수·경계가 고지 없이 바뀌어 전년 대비 비교가
+    무의미해지는 사례가 다수 확인된다. 이 명령은 그 변화를 기계적으로 드러낸다.
+    """
+    for f in (a.prev, a.curr):
+        if not Path(f).exists():
+            sys.exit(f"records.json 없음: {f}")
+    out = a.out or None
+    r = diff.run(a.prev, a.curr, out)
+    d = r["result"]
+    if out:
+        print(f"대조 리포트 생성: {out}")
+    else:
+        print(r["markdown"])
+        return
+    # 요약 한 줄
+    basis_changed = bool(d["basis"] or d["categories_added"] or d["categories_removed"]
+                         or d["factors_changed"] or d["factors_added"] or d["factors_removed"])
+    print(f"  기준 변화: {'있음 ⚠️ (리포트 §1 확인)' if basis_changed else '없음 — 직접 비교 가능'}")
+    t = d["totals"]
+    print(f"  총계: {t['이전']/1000:,.3f} → {t['이번']/1000:,.3f} tCO2eq ({t['증감률']})")
+
+
 def cmd_selftest(a):
     from . import factors
     factors.selftest(); calc.selftest(); extract.selftest()
-    validate.selftest(); scope3.selftest(); report.selftest()
+    validate.selftest(); scope3.selftest(); diff.selftest(); report.selftest()
     print("\n전 모듈 selftest 통과 ✅ (네트워크 없음)")
 
 
@@ -341,6 +367,12 @@ def main():
     v = sub.add_parser("review", help="검토 큐 조회 + 교정본 병합 재집계")
     v.add_argument("out", help="리포트 출력 폴더(records.json 위치)")
     v.set_defaults(func=cmd_review)
+
+    df = sub.add_parser("diff", help="두 실행 대조 — 산정 기준 변화 + 배출량 요인분해")
+    df.add_argument("prev", help="이전 실행의 records.json")
+    df.add_argument("curr", help="이번 실행의 records.json")
+    df.add_argument("--out", help="대조 리포트 출력 경로(.md). 미지정 시 화면 출력")
+    df.set_defaults(func=cmd_diff)
 
     s = sub.add_parser("selftest", help="네트워크 없이 전 모듈 검증")
     s.set_defaults(func=cmd_selftest)
