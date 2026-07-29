@@ -230,18 +230,39 @@ def _call_openai_compat(url: str, key: str | None, prompt: str,
 
 
 def _call_anthropic(key: str, prompt: str, pages: list[bytes], model: str) -> str:
-    """Anthropic Messages API(비전, 다중 이미지)."""
+    """Anthropic Messages API(비전, 다중 이미지).
+
+    OpenAI 호환 경로와 달리 요청 형태·인증·응답 파싱이 전부 다르므로 별도 함수다.
+    아래 세 가지는 현행 모델(Sonnet 5·Opus 4.7 이후)의 제약이라 어겨선 안 된다.
+    """
     import requests
     content = [{"type": "image", "source": {"type": "base64",
                 "media_type": _media_type(p), "data": base64.b64encode(p).decode()}}
                for p in pages]
     content.append({"type": "text", "text": prompt})
-    payload = {"model": model, "max_tokens": 1024, "temperature": 0,
+    # temperature를 보내지 않는다 — Sonnet 5·Opus 4.7 이후 모델은 temperature·top_p·top_k를
+    # 기본값 아닌 값으로 주면 400이다(기본 1.0이므로 0도 위반). 결정성은 프롬프트로 확보한다.
+    # max_tokens는 thinking + 본문의 '합산' 상한이고 이 모델들은 thinking이 기본 ON이라,
+    # 1024로는 추론 토큰이 먹고 남은 자리에 JSON이 잘려 들어갈 수 있다.
+    payload = {"model": model, "max_tokens": 4096,
                "messages": [{"role": "user", "content": content}]}
     r = requests.post(ANTHROPIC_URL, json=payload, timeout=120, headers={
         "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"})
     r.raise_for_status()
-    return r.json()["content"][0]["text"]
+    return _anthropic_text(r.json().get("content", []))
+
+
+def _anthropic_text(blocks: list) -> str:
+    """content 배열에서 text 블록을 꺼낸다.
+
+    thinking이 켜진 모델은 content[0]이 thinking 블록이라 [0]["text"]가 KeyError가 난다.
+    위치가 아니라 type으로 찾는다.
+    """
+    for b in blocks:
+        if isinstance(b, dict) and b.get("type") == "text":
+            return b["text"]
+    kinds = [b.get("type") for b in blocks if isinstance(b, dict)]
+    raise RuntimeError(f"Anthropic 응답에 text 블록 없음 (블록 종류: {kinds})")
 
 
 def selftest():

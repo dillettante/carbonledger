@@ -68,9 +68,9 @@ pip install -e .          # requests + openpyxl
 
 | 백엔드 | 설정 | 특징 |
 |---|---|---|
-| **Claude** | `CARBONLEDGER_BACKEND=anthropic` + `ANTHROPIC_API_KEY` | 정확도 높음. ⚠️ 증빙 이미지가 Anthropic으로 전송 |
-| **ChatGPT** | `CARBONLEDGER_BACKEND=openai` + `OPENAI_API_KEY` | 정확도 높음. ⚠️ 증빙 이미지가 OpenAI로 전송 |
-| **로컬(LM Studio)** | 기본값. [LM Studio](https://lmstudio.ai) 설치 후 `qwen/qwen3-vl-4b` 로드 | **증빙이 외부로 안 나감** — 기밀·개인정보 증빙에 권장 |
+| **Claude** | `CARBONLEDGER_BACKEND=anthropic` + `ANTHROPIC_API_KEY` | 정확도 높음. ⚠️ 증빙 이미지가 Anthropic으로 전송 · 실호출 미검증(아래 한계 참조) |
+| **ChatGPT** | `CARBONLEDGER_BACKEND=openai` + `OPENAI_API_KEY` | 정확도 높음. ⚠️ 증빙 이미지가 OpenAI로 전송 · 실호출 미검증(아래 한계 참조) |
+| **로컬(LM Studio)** | 기본값. [LM Studio](https://lmstudio.ai) 설치 후 `qwen/qwen3-vl-4b` 로드 | **증빙이 외부로 안 나감** — 기밀·개인정보 증빙에 권장. **실물 고지서로 검증된 경로** |
 | **로컬(Ollama)** | `CARBONLEDGER_BACKEND=ollama` + `ollama pull qwen3-vl:4b` | 증빙이 외부로 안 나감. 터미널 사용자용 |
 
 ```bash
@@ -159,7 +159,7 @@ carbonledger run examples/input --period 2026 --out examples/out
 ## 한계 (알고 쓰라)
 
 - **거리는 대권거리 근사** — 철도·버스는 ×1.2 우회보정, 항공은 DEFRA 계수의 8% uplift 내장(그래서 항공엔 거리보정 미적용). 실노선거리보다 부정확할 수 있다. 철도는 내장 역좌표로 오프라인 산정하고, 미등재 역·기타 수단은 지도 API(Kakao 권장, Naver 폴백 — Naver Geocoding은 주소 지향이라 지명 검색 미실측)로 좌표를 얻는다.
-- **상용 LLM 백엔드는 실호출 미검증** — 개발 검증은 로컬(LM Studio)로 수행. 상용(Claude·ChatGPT)은 표준 API 규격 구현이며 첫 실행 전 소액 테스트를 권장. 상용 사용 시 증빙 이미지(직원·거래처 개인정보 포함 가능)가 해외 제공자로 전송되므로 **개인정보보호법상 국외이전·처리위탁 검토가 필요할 수 있다**.
+- **상용 LLM 백엔드는 실호출 미검증** — 개발 검증은 로컬(LM Studio)로 수행했다. 상용(Claude·ChatGPT) 경로는 요청 형태·인증·응답 파싱을 제공자 공식 문서 규격과 대조하고 계약 테스트(`tests/test_backends.py`)로 고정해 두었으나, **실제 API 응답 200을 받아 본 적은 없다.** 문서에 적히지 않은 이유로 거절될 여지가 남아 있으니 첫 실행 전 1건으로 시험하라. 상용 사용 시 증빙 이미지(직원·거래처 개인정보 포함 가능)가 해외 제공자로 전송되므로 **개인정보보호법상 국외이전·처리위탁 검토가 필요할 수 있다**.
 - **Scope 2는 location-based 단일** — market-based(녹색프리미엄·REC·PPA) 미지원.
 - **부분집계** — Scope 1 냉매 누출·비상발전, Scope 2 지역난방 열·스팀은 자동 산정하지 않는다(리포트에 미측정으로 명시).
 - **고지서 추출은 문서 품질에 좌우** — 합성·고화질 샘플에선 정확하나, 흐린 스캔·저화질에선 오류가 난다. 그래서 검증 관문과 표본 감사가 필수다.

@@ -23,3 +23,5 @@ jobs:
         run: python -m carbonledger.cli selftest
       - name: Golden 대조 (LLM 목킹)
         run: python tests/test_golden.py
+      - name: 백엔드 계약 (HTTP 목킹)
+        run: python tests/test_backends.py
