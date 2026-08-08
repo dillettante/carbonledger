@@ -157,6 +157,26 @@ def _write_md(path, records, review_queue, s1, s2, s3, total, period, inv=None):
                  f"{r.get('activity','')} | {r.get('activity_value','')} {r.get('activity_unit','')} | "
                  f"`{r.get('factor_id','')}` | {src} | {r.get('kgco2e','')} |")
 
+    # 거리 산정 근거 — 지명이 어느 좌표로 해석됐는지. 거리(km)만 남기면
+    # 지도 API 1순위가 동명이지·유사상호로 엉뚱한 곳이어도 감사에서 보이지 않는다.
+    geo_rows = [r for r in records if r.get("geocoding", {}).get("origin_resolved")]
+    if geo_rows:
+        L.append("\n### 4-1. 거리 산정 근거 (출장 — 지명→좌표 해석)\n")
+        L.append("| 파일 | 출발(해석 결과) | 도착(해석 결과) | 대권거리 | 우회계수 | 적용거리 |")
+        L.append("|---|---|---|---|---|---|")
+        for r in geo_rows:
+            g = r["geocoding"]
+            o, d = g["origin_resolved"], g["destination_resolved"]
+            det = g.get("detour_factor", 1.0)
+            L.append(
+                f"| {r.get('source_file','')} | {o['query']} → {o['source']} "
+                f"({o['lat']:.4f}, {o['lon']:.4f}) | {d['query']} → {d['source']} "
+                f"({d['lat']:.4f}, {d['lon']:.4f}) | {g.get('great_circle_km','')} km | "
+                f"×{det} | {r.get('activity_value','')} km |")
+        L.append("\n> 좌표 출처가 지도 API(Kakao·Naver)면 **검색 1순위 결과**다 — 동명 지점·"
+                 "유사 상호로 엉뚱한 곳이 잡힐 수 있으니 해석 결과를 확인할 것. "
+                 "거리는 대권(직선) 근사이며 철도·버스는 우회계수로 실노선을 근사한다.\n")
+
     _n = [5]  # 이후 절은 조건부 출력이라 번호를 동적으로 매긴다(하드코딩 시 §5→§7 드리프트)
     L.append("\n## 5. 사용된 배출계수 · 출처 (부록)\n")
     used = factors.all_used(r.get("factor_id") for r in records)
@@ -259,15 +279,23 @@ def _write_xlsx(path, records, review_queue, s1, s2, s3, total, period, inv=None
     wr = wb.create_sheet("건별_감사추적")
     wr.append(["파일", "Scope", "카테고리", "활동", "활동량", "활동단위",
                "factor_id", "계수값", "계수단위", "계수출처", "배출량(kg)",
-               "수기교정", "교정자", "교정일시", "교정근거"])
+               "수기교정", "교정자", "교정일시", "교정근거", "거리산정근거"])
     for r in records:
         rv = r.get("review") or {}
+        g = r.get("geocoding") or {}
+        geo = ""
+        if g.get("origin_resolved"):
+            o, d = g["origin_resolved"], g["destination_resolved"]
+            geo = (f"{o['query']}→{o['source']} ({o['lat']:.4f},{o['lon']:.4f}) / "
+                   f"{d['query']}→{d['source']} ({d['lat']:.4f},{d['lon']:.4f}) / "
+                   f"대권 {g.get('great_circle_km')}km ×{g.get('detour_factor')}")
         wr.append([r.get("source_file"), r.get("scope"), r.get("category"),
                    r.get("activity"), r.get("activity_value"), r.get("activity_unit"),
                    r.get("factor_id"), r.get("factor_value"), r.get("factor_unit"),
                    r.get("factor_source", ""), r.get("kgco2e"),
                    "Y" if r.get("human_corrected") else "",
-                   rv.get("reviewer", ""), rv.get("reviewed_at", ""), rv.get("basis", "")])
+                   rv.get("reviewer", ""), rv.get("reviewed_at", ""), rv.get("basis", ""),
+                   geo])
 
     wf = wb.create_sheet("계수목록")
     wf.append(["factor_id", "값", "단위", "신뢰수준", "연도", "GWP기준", "출처", "출처URL"])

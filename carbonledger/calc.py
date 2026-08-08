@@ -51,6 +51,9 @@ def _kakao_geocode(place: str, key: str) -> tuple[float, float] | None:
     if not docs:
         return None
     d = docs[0]
+    # 매칭된 장소명을 함께 남긴다 — 키워드 검색 1순위가 엉뚱한 곳일 때
+    # (동명 지점·유사 상호) 감사에서 잡아야 한다
+    _note_match(place, d.get("place_name") or d.get("address_name") or "")
     return (float(d["y"]), float(d["x"]))  # y=위도, x=경도
 
 
@@ -64,7 +67,20 @@ def _naver_geocode(place: str, cid: str, csec: str) -> tuple[float, float] | Non
     if not docs:
         return None
     d = docs[0]
+    _note_match(place, d.get("roadAddress") or d.get("jibunAddress") or "")
     return (float(d["y"]), float(d["x"]))  # y=위도, x=경도
+
+
+# 조회 1건의 매칭 결과를 담아 두는 자리. distance_km이 호출 직전 비우고,
+# 호출 후 꺼내 레코드에 실어 보낸다(감사추적). 모듈 전역이지만 이 툴은
+# 단일 스레드 배치라 경합이 없다 — 병렬화하면 컨텍스트 변수로 승격할 것.
+_LAST_MATCH: dict[str, str] = {}
+_GEOCODE_CACHE: dict[tuple[str, str], tuple[float, float] | None] = {}
+
+
+def _note_match(query: str, matched: str):
+    if matched:
+        _LAST_MATCH[query] = matched
 
 
 def _api_geocode(place: str) -> tuple[float, float] | None:
@@ -79,29 +95,56 @@ def _api_geocode(place: str) -> tuple[float, float] | None:
     return None
 
 
-def _coords(place: str, transport: str) -> tuple[float, float] | None:
-    """지명 → 좌표. 철도역은 내장 좌표 우선(오프라인·지명 외부전송 없음), 없으면 지도 API."""
+def _coords(place: str, transport: str) -> tuple[float, float, str] | None:
+    """지명 → (위도, 경도, 출처). 철도역은 내장 좌표 우선(오프라인·외부전송 없음).
+
+    같은 지명을 여러 건에서 조회하는 일이 흔하다(본사↔공장 왕복 등) — 실행 중
+    캐시해 API 쿼터·비용을 아낀다. 실패(None)도 캐시한다: 키가 없거나 없는
+    지명이면 몇 번을 물어도 결과가 같고, 그 재조회가 쿼터를 태운다.
+    """
     if transport == "철도":
         c = _station_coords().get(place)
         if c:
-            return c
-    suffix = "역" if transport == "철도" else ""
-    return _api_geocode(place + suffix)
+            return (c[0], c[1], "내장 역좌표")
+
+    key = (place, transport)
+    if key not in _GEOCODE_CACHE:
+        suffix = "역" if transport == "철도" else ""
+        _GEOCODE_CACHE[key] = _api_geocode(place + suffix)
+    c = _GEOCODE_CACHE[key]
+    if not c:
+        return None
+    src = "Kakao" if os.environ.get("KAKAO_REST_API_KEY") else "Naver"
+    matched = _LAST_MATCH.get(place + ("역" if transport == "철도" else ""), "")
+    return (c[0], c[1], f"{src}: {matched}" if matched else src)
 
 
-def distance_km(origin: str, destination: str, transport: str) -> float | None:
+def distance_km(origin: str, destination: str, transport: str,
+                trace: dict | None = None) -> float | None:
     """구간 거리(km). 철도역은 내장 좌표로 오프라인 산정, 그 외/미등재는 지도 API 폴백.
 
     지도 API = Kakao(KAKAO_REST_API_KEY) 우선, 없으면 Naver(NAVER_MAP_CLIENT_ID/SECRET).
     셋 다 없으면(내장좌표도, 키도) None → 호출부가 review 큐로.
     ⚠️ 대권거리 근사. 철도·버스는 ×1.2 우회계수로 실노선 근사(그래도 부정확 가능).
+
+    trace(dict)를 주면 각 지명이 **어느 좌표로 어떻게 해석됐는지** 채워 넣는다.
+    지도 API 1순위 결과가 동명이지·유사상호로 엉뚱한 곳일 수 있어, 그 판단 근거가
+    레코드에 남아야 감사에서 잡힌다(거리만 남으면 오매칭이 보이지 않는다).
     """
     a = _coords(origin, transport)
     b = _coords(destination, transport)
     if not a or not b:
         return None
     _, detour = _TRANSPORT.get(transport, ("", 1.0))
-    return round(haversine(a, b) * detour, 1)
+    gcd = haversine((a[0], a[1]), (b[0], b[1]))
+    if trace is not None:
+        trace.update({
+            "origin_resolved": {"query": origin, "lat": a[0], "lon": a[1], "source": a[2]},
+            "destination_resolved": {"query": destination, "lat": b[0], "lon": b[1],
+                                     "source": b[2]},
+            "great_circle_km": round(gcd, 1), "detour_factor": detour,
+        })
+    return round(gcd * detour, 1)
 
 
 # ── Scope별 배출량 산정 ────────────────────────────────────────────
@@ -212,6 +255,27 @@ def selftest():
     assert dk and 380 < dk < 400, f"내장좌표 철도거리 이상: {dk}"
     # 미등재 역은 키 없으면 None(호출부가 큐로)
     assert distance_km("서울", "없는역", "철도") is None, "미등재역이 좌표를 지어냄"
+
+    # 감사추적: 지명이 어느 좌표로 해석됐는지 남아야(거리만 남으면 오매칭이 안 보임)
+    tr = {}
+    distance_km("서울", "부산", "철도", trace=tr)
+    assert tr["origin_resolved"]["source"] == "내장 역좌표", f"좌표 출처 미기록: {tr}"
+    assert abs(tr["origin_resolved"]["lat"] - 37.5547) < 1e-6, "해석 좌표 불일치"
+    assert tr["detour_factor"] == 1.2 and 320 < tr["great_circle_km"] < 330, \
+        f"대권거리·우회계수 미기록: {tr}"
+
+    # 캐시: 같은 지명 재조회는 API를 다시 때리지 않는다(쿼터·비용)
+    calls = []
+    _orig = globals()["_api_geocode"]
+    globals()["_api_geocode"] = lambda p: (calls.append(p), (37.5, 127.0))[1]
+    try:
+        _GEOCODE_CACHE.clear()
+        distance_km("가상지명A", "가상지명B", "버스")
+        distance_km("가상지명A", "가상지명B", "버스")
+        assert len(calls) == 2, f"동일 지명 재조회가 캐시되지 않음(호출 {len(calls)}회)"
+    finally:
+        globals()["_api_geocode"] = _orig
+        _GEOCODE_CACHE.clear()
 
     # 연료: 경유 100L × 2.577
     r = scope1_fuel("경유", 100)

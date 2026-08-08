@@ -224,6 +224,47 @@ def test_xlsx_subtotal_and_inventory_sheet(tmp_path):
     assert any("(주)테스트" in str(v) for v in inv_vals), "조직 선언 미전재"
 
 
+# ── 감사추적: 지명→좌표 해석 근거가 레코드·리포트에 남는가 ──
+def test_geocoding_audit_trail(tmp_path, monkeypatch):
+    """거리(km)만 남기면 지도 API 오매칭(동명이지)을 감사에서 잡을 수 없다."""
+    calls = []
+
+    def fake_api(place):
+        calls.append(place)
+        calc._note_match(place, f"{place} 1순위매칭결과")
+        return (37.5, 127.0) if "서울" in place else (35.1, 129.0)
+
+    monkeypatch.setattr(calc, "_api_geocode", fake_api)
+    calc._GEOCODE_CACHE.clear()
+
+    records, queue = [], []
+    rec = {"transport": "버스", "origin": "서울터미널", "destination": "부산터미널",
+           "date": "2026-07-12", "amount": 30000}
+    cli._calc_travel("버스표.png", "transport", rec, "2026", records, queue)
+    assert len(records) == 1, f"산정 실패: {queue}"
+
+    g = records[0]["geocoding"]
+    assert g["origin_resolved"]["lat"] == 37.5, "해석 좌표 미기록"
+    assert "1순위매칭결과" in g["origin_resolved"]["source"], \
+        f"매칭된 장소명이 안 남음 — 오매칭 감사 불가: {g}"
+    assert g["detour_factor"] == 1.2 and g["great_circle_km"] > 0
+
+    # 리포트(md·xlsx) 양쪽에 드러나야 — records.json에만 있으면 사람이 못 본다
+    from openpyxl import load_workbook
+    report.build(records, [], str(tmp_path), period="2026")
+    md = (tmp_path / "report.md").read_text(encoding="utf-8")
+    assert "거리 산정 근거" in md and "1순위매칭결과" in md, "md에 산정 근거 누락"
+    ws = load_workbook(tmp_path / "report.xlsx")["건별_감사추적"]
+    assert ws.cell(1, 16).value == "거리산정근거", "xlsx 감사추적 열 누락"
+    assert "1순위매칭결과" in str(ws.cell(2, 16).value), "xlsx에 산정 근거 미기록"
+
+    # 캐시: 같은 지명 반복 조회가 API 쿼터를 태우지 않아야
+    before = len(calls)
+    cli._calc_travel("버스표2.png", "transport", dict(rec), "2026", records, queue)
+    assert len(calls) == before, f"동일 지명 재조회 발생({len(calls) - before}회)"
+    calc._GEOCODE_CACHE.clear()
+
+
 if __name__ == "__main__":
     import tempfile
 
@@ -242,7 +283,8 @@ if __name__ == "__main__":
                          (test_xlsx_no_formula_injection, False),
                          (test_scope3_correction_requires_category, False),
                          (test_catn_skip_to_queue, False),
-                         (test_xlsx_subtotal_and_inventory_sheet, False)]:
+                         (test_xlsx_subtotal_and_inventory_sheet, False),
+                         (test_geocoding_audit_trail, True)]:
         with tempfile.TemporaryDirectory() as d:
             fn(Path(d), _P()) if needs_mp else fn(Path(d))
-    print("회귀 테스트 12종 통과 ✅")
+    print("회귀 테스트 13종 통과 ✅")

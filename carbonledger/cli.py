@@ -94,8 +94,10 @@ def _calc_travel(fname, doc_type, rec, period, records, queue):
         return
     # 지도 API의 네트워크 오류·쿼터 소진(429)·키 오류는 이 건의 문제이지 실행 전체의
     # 문제가 아니다 — 예외를 큐로 보내 배치가 계속 돌게 한다(fail-closed, _calc_bill과 대칭).
+    geo = {}   # 지명이 어느 좌표로 해석됐는지 — 오매칭을 감사에서 잡기 위한 근거
     try:
-        km = calc.distance_km(rec["origin"], rec["destination"], rec["transport"])
+        km = calc.distance_km(rec["origin"], rec["destination"], rec["transport"],
+                              trace=geo)
     except Exception as e:
         queue.append({"source_file": fname, "extracted": rec,
                       "issues": [f"거리 산정 오류(지도 API 호출 실패): {e}"]})
@@ -107,7 +109,7 @@ def _calc_travel(fname, doc_type, rec, period, records, queue):
     e = calc.scope3_travel(rec["transport"], km)
     records.append({"source_file": fname, "scope": 3, "category": 6,
                     "activity": f"{rec['transport']} {rec['origin']}→{rec['destination']}",
-                    **e, "extracted": rec})
+                    **e, "geocoding": geo, "extracted": rec})
 
 
 def _bill_period_key(rec):

@@ -51,7 +51,8 @@ def test_travel_pipeline_mocked(tmp_path, monkeypatch):
     monkeypatch.setattr(extract, "extract", lambda *a, **k: {
         "transport": "철도", "origin": "서울", "destination": "부산",
         "date": "2026-05-01", "amount": 59800})
-    monkeypatch.setattr(calc, "distance_km", lambda o, d, t: 400.0)
+    monkeypatch.setattr(calc, "distance_km",
+                        lambda o, d, t, trace=None: 400.0)
 
     records, queue = [], []
     cli._process_travel(travel, "mock-model", "2026", records, queue)
@@ -71,7 +72,8 @@ def test_period_filter(tmp_path, monkeypatch):
     monkeypatch.setattr(extract, "extract", lambda *a, **k: {
         "transport": "철도", "origin": "서울", "destination": "부산",
         "date": "2024-01-01", "amount": 50000})
-    monkeypatch.setattr(calc, "distance_km", lambda o, d, t: 400.0)
+    monkeypatch.setattr(calc, "distance_km",
+                        lambda o, d, t, trace=None: 400.0)
 
     records, queue = [], []
     cli._process_travel(travel, "mock", "2026", records, queue)
