@@ -34,12 +34,12 @@ You may obtain a copy of the License at
    - 출처: 온실가스종합정보센터(gir.go.kr) 공표 국가 전력배출계수.
    - 성격: 정부 공표 통계 수치.
 
-3) DEFRA/DESNZ 2024 Greenhouse Gas Conversion Factors
+3) DEFRA/DESNZ 2026 Greenhouse Gas Conversion Factors
    (Scope 3: 항공·버스·숙박·통근 수단, 화물운송 톤·km, 폐기물 처리 톤당,
     연료·전력 WTT(well-to-tank), 전력 송배전 손실 T&D)
    - 출처: UK Department for Energy Security and Net Zero,
-     "2024 Government Greenhouse Gas Conversion Factors for Company Reporting"
-     (condensed set / full set).
+     "2026 Government Greenhouse Gas Conversion Factors for Company Reporting"
+     (flat file, 2026-07 수정판 / full set).
    - 라이선스: Open Government Licence v3.0 (OGL v3).
      재배포 시 출처 표시 의무를 이행한다.
      http://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/

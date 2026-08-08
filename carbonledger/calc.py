@@ -227,8 +227,8 @@ def selftest():
     g = scope1_citygas(4310, "MJ")
     assert g["activity_value"] == 100.0 and g["kgco2e"] == round(2.182 * 100, 3), "도시가스 MJ 환산 오류"
 
-    # 출장 항공 100km × 0.273
-    assert scope3_travel("항공", 100)["kgco2e"] == round(0.273 * 100, 3), "항공 산정 오류"
+    # 출장 항공 100km × 0.22928 (DEFRA 2026)
+    assert scope3_travel("항공", 100)["kgco2e"] == round(0.22928 * 100, 3), "항공 산정 오류"
     # 시내버스 분기
     assert scope3_travel("버스", 10, local_bus=True)["factor_id"] == "travel_bus_local"
 

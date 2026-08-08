@@ -122,7 +122,7 @@ carbonledger run examples/input --period 2026 --out examples/out
 나오는 결과:
 ```
 리포트 생성: examples/out/report.md · report.xlsx · records.json
-  Scope1 128.85 / Scope2 208.65 / Scope3 465701.752 kg  → 합계 466039.252 kgCO2eq
+  Scope1 128.85 / Scope2 208.65 / Scope3 465688.625 kg  → 합계 466026.125 kgCO2eq
   산정 30건 · 검토대기(미포함) 0건
 ```
 `examples/out/report.md`를 열면 조직 탄소발자국 리포트가, `examples/sample_output/`에는 미리 만들어 둔 샘플이 있습니다.
@@ -350,12 +350,14 @@ carbonledger diff 2025년/records.json 2026년/records.json --out 대조.md
 
 **Scope 1 연료** (한국 gir 별표12, CO2만): `fuel_gasoline` 2.177 · `fuel_diesel` 2.577 kgCO2/L · `fuel_citygas_lng` 2.182 kgCO2/Nm³
 **Scope 2 전력**: `electricity_kr` 0.4173 kgCO2eq/kWh (2023 소비단, location-based)
-**출장(3-6)**: `travel_rail_ktx` 0.0269 · `travel_air_domestic` 0.273 · `travel_bus_intercity` 0.02717 · `travel_bus_local` 0.10846 (인·km) · `travel_hotel_kr` 55.8 (박당)
-**통근(3-7)**: `commute_car_petrol` 0.1645 · `commute_car_diesel` 0.16984 · `commute_car_hybrid` 0.12607 (km, 차량당) · `commute_subway` 0.0278 · `commute_bus_local` 0.10846 (인·km)
-**연료·에너지 상류(3-3, 자동파생)**: `wtt_gasoline` 0.58094 · `wtt_diesel` 0.61101 (L) · `wtt_citygas_lng` 0.3366 (Nm³) · `wtt_electricity_kr` 0.0459 · `td_electricity_kr` 0.0183 (kWh) ⚠️UK 프록시
-**운송(3-4·9, tonne·km)**: `freight_hgv` 0.09752 · `freight_van` 0.61643 · `freight_rail` 0.02779 · `freight_ship_container` 0.01612 · `freight_air_longhaul` 1.09904
-**폐기물(3-5·12, tonne당)**: `waste_mixed_landfill` 520.3342 · `waste_mixed_combustion` 6.41061 ⚠️직접 CO2 제외 · `waste_paper_landfill` 1164.39 · `waste_plastic_landfill` 8.88386 · `waste_recycling` 6.41061 ⚠️크레딧 미포함
+**출장(3-6)**: `travel_rail_ktx` 0.0269 · `travel_air_domestic` 0.22928 · `travel_bus_intercity` 0.03948 · `travel_bus_local` 0.10151 (인·km) · `travel_hotel_kr` 55.8 (박당)
+**통근(3-7)**: `commute_car_petrol` 0.16152 · `commute_car_diesel` 0.17265 · `commute_car_hybrid` 0.12961 (km, 차량당) · `commute_subway` 0.01549 · `commute_bus_local` 0.10151 (인·km)
+**연료·에너지 상류(3-3, 자동파생)**: `wtt_gasoline` 0.58094 · `wtt_diesel` 0.61101 (L) · `wtt_citygas_lng` 0.3366 (Nm³) · `wtt_electricity_kr` 0.03682 · `td_electricity_kr` 0.01299 (kWh) ⚠️UK 프록시
+**운송(3-4·9, tonne·km)**: `freight_hgv` 0.10356(비냉장 평균 — 2026판 냉장/비냉장 분리) · `freight_van` 0.63511 · `freight_rail` 0.02583 · `freight_ship_container` 0.01612 · `freight_air_longhaul` 0.89939
+**폐기물(3-5·12, tonne당)**: `waste_mixed_landfill` 520.58 · `waste_mixed_combustion` 4.65358 ⚠️직접 CO2 제외 · `waste_paper_landfill` 1164.51 · `waste_plastic_landfill` 9.00687 · `waste_recycling` 4.65358 ⚠️크레딧 미포함
 **구매(3-1)**: `spend_category1_USER` (사용자 입력)
+
+DEFRA 계열은 **2026년판**(2026-06-11 공표, flat file 2026-07 수정판 대조) 기준이다. 2024→2026 사이 큰 변동: 코치 +45%(운수사 실측데이터 교체), 지하철 −44%(영국 그리드 탈탄소 — UK 프록시 한계 유의), 전력 WTT/T&D −20~29%, 항공화물 −18%.
 
 값의 출처·연도·경고는 factors.json의 각 항목 note와 리포트 §5 부록에 있습니다. 계수 근거 전량은 `PHASE0_RESEARCH.md`.
 

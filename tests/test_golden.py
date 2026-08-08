@@ -22,13 +22,13 @@ def test_commute_golden(tmp_path):
     assert queue == [], f"통근 처리에 예외: {queue}"
     assert len(records) == 4
 
-    # E001 지하철: 18km ×2 ×220일 = 7920km × 0.02780 = 220.176
+    # E001 지하철: 18km ×2 ×220일 = 7920km × 0.01549 = 122.681 (DEFRA 2026)
     e1 = next(r for r in records if r["source_file"].endswith("#1"))
-    assert e1["kgco2e"] == round(7920 * 0.02780, 3) == 220.176
+    assert e1["kgco2e"] == round(7920 * 0.01549, 3) == 122.681
 
-    # E003 승용차 휘발유: 25 ×2 ×220 = 11000km × 0.16450 = 1809.5
+    # E003 승용차 휘발유: 25 ×2 ×220 = 11000km × 0.16152 = 1776.72 (DEFRA 2026)
     e3 = next(r for r in records if r["source_file"].endswith("#3"))
-    assert e3["kgco2e"] == round(11000 * 0.16450, 3)
+    assert e3["kgco2e"] == round(11000 * 0.16152, 3)
 
 
 def test_spend_requires_source(tmp_path):
@@ -148,14 +148,14 @@ def test_scope3_freight_waste_golden(tmp_path):
                  "트럭,15000,tonne-km,freight_hgv,,\n", encoding="utf-8")
     recs, q = [], []
     scope3.process_csv(f, 4, recs, q)
-    assert q == [] and recs[0]["kgco2e"] == round(0.09752 * 15000, 3), "freight 산정 오류"
+    assert q == [] and recs[0]["kgco2e"] == round(0.10356 * 15000, 3), "freight 산정 오류"
 
     w = tmp_path / "cat5_waste.csv"
     w.write_text("item,activity,unit,factor_id,factor,factor_source\n"
                  "매립,2,tonne,waste_mixed_landfill,,\n", encoding="utf-8")
     recs2, q2 = [], []
     scope3.process_csv(w, 5, recs2, q2)
-    assert q2 == [] and recs2[0]["kgco2e"] == round(520.3342 * 2, 3), "waste 산정 오류"
+    assert q2 == [] and recs2[0]["kgco2e"] == round(520.58023 * 2, 3), "waste 산정 오류"
 
 
 def test_scope3_cat3_derivation_golden(tmp_path):
@@ -169,9 +169,9 @@ def test_scope3_cat3_derivation_golden(tmp_path):
     ]
     scope3.derive_category3(recs, [])
     cat3 = [r for r in recs if r.get("category") == 3]
-    # 경유 50×0.61101 + 전력 500×(0.0459 WTT + 0.0183 T&D)
+    # 경유 50×0.61101 + 전력 500×(0.03682 WTT + 0.01299 T&D) (DEFRA 2026)
     total = round(sum(r["kgco2e"] for r in cat3), 3)
-    assert total == round(50 * 0.61101 + 500 * 0.0459 + 500 * 0.0183, 3), f"cat3 파생 오류: {total}"
+    assert total == round(50 * 0.61101 + 500 * 0.03682 + 500 * 0.01299, 3), f"cat3 파생 오류: {total}"
 
 
 def test_corrected_record_gate(tmp_path):
