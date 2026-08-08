@@ -229,18 +229,24 @@ def _process_spend(csv_path: Path, records, queue):
                               "issues": [f"지출행 처리 실패: {ex}"]})
 
 
-def cmd_run(a):
-    root = Path(a.input)
+def run_pipeline(input_dir, period=None, model=None, out_dir=None) -> dict:
+    """증빙 폴더 일괄 처리 → 리포트 생성. 반환: 요약 dict(+ out·warnings).
+
+    CLI(cmd_run)와 MCP 서버가 **같은 함수**를 쓴다 — 파이프라인을 복제하면
+    한쪽만 검증 관문이 바뀌는 순간 두 표면의 산정 결과가 갈린다.
+    화면 출력은 하지 않는다(호출부의 몫). 입력 폴더가 없으면 FileNotFoundError.
+    """
+    root = Path(input_dir)
     if not root.is_dir():
-        sys.exit(f"입력 폴더 없음: {root}")
+        raise FileNotFoundError(f"입력 폴더 없음: {root}")
     records, queue = [], []
 
     travel = root / "travel"
     if travel.is_dir():
-        _process_travel(travel, a.model, a.period, records, queue)
+        _process_travel(travel, model, period, records, queue)
     for sub in ("scope1-fuel", "scope2-energy"):
         if (root / sub).is_dir():
-            _process_bills(root / sub, sub, a.model, a.period, records, queue)
+            _process_bills(root / sub, sub, model, period, records, queue)
 
     if (root / "commute.csv").exists():
         _process_commute(root / "commute.csv", records, queue)
@@ -270,25 +276,46 @@ def cmd_run(a):
     scope3.derive_category3(records, queue)
 
     inv = inventory.load(root)
-    if inv:
-        for w in inventory.check(inv):
-            print(f"[선언 확인] {w}")
+    warnings = inventory.check(inv) if inv else []
 
-    out = a.out or str(root / "out")
-    summary = report.build(records, queue, out, period=a.period, inv=inv)
+    out = str(out_dir) if out_dir else str(root / "out")
+    summary = report.build(records, queue, out, period=period, inv=inv)
+    summary["out"] = out
+    summary["declaration_warnings"] = warnings
+    summary["review_queue"] = queue
+    return summary
+
+
+def cmd_run(a):
+    try:
+        summary = run_pipeline(a.input, period=a.period, model=a.model, out_dir=a.out)
+    except FileNotFoundError as e:
+        sys.exit(str(e))
+    for w in summary["declaration_warnings"]:
+        print(f"[선언 확인] {w}")
+    out = summary["out"]
     print(f"\n리포트 생성: {out}/report.md · report.xlsx · records.json")
     print(f"  Scope1 {summary['scope1']} / Scope2 {summary['scope2']} / "
           f"Scope3 {summary['scope3']} kg  → 합계 {summary['total_kgco2e']} kgCO2eq")
     print(f"  산정 {summary['records']}건 · 검토대기(미포함) {summary['review']}건")
 
 
-def cmd_review(a):
-    """검토 큐 조회 + reviewed/*.json 병합 재집계(human-in-the-loop 완결)."""
+def review_merge(out_dir) -> dict:
+    """reviewed/*.json 적재·검증·병합 재집계. 반환: 결과 dict(화면 출력 없음).
+
+    CLI(cmd_review)와 MCP 서버가 **같은 함수**를 쓴다 — 교정 관문을 복제하면
+    한쪽이 무검증 우회로가 된다.
+
+    반환 키: queue(잔여 검토대기) · corrected(반영된 교정본) · rejected(반려·사유) ·
+             merged(재집계 여부) · summary(재집계 시 리포트 요약) · out
+    records.json이 없으면 FileNotFoundError.
+    """
     import json
-    out = Path(a.out)
+    out = Path(out_dir)
     rec_file = out / "records.json"
     if not rec_file.exists():
-        sys.exit(f"records.json 없음: {out}")
+        raise FileNotFoundError(
+            f"records.json 없음: {out} — 먼저 run으로 리포트를 만들어야 한다")
     data = json.loads(rec_file.read_text(encoding="utf-8"))
     queue = data.get("review_queue", [])
     reviewed_dir = out / "reviewed"
@@ -318,21 +345,10 @@ def cmd_review(a):
             c["human_corrected"] = True   # 감사추적 표지(리포트 §6-B에 노출됨)
             corrected.append(c)
 
-    if rejected:
-        print(f"⚠️ 교정본 {len(rejected)}건 반려(합계 미반영):")
-        for r in rejected:
-            for i in r["issues"]:
-                print(f"  - {i}")
-        print()
-
     if not corrected and not rejected:
-        print(f"검토 대기 {len(queue)}건. 교정하려면 각 건을 아래 형식으로 "
-              f"{reviewed_dir}/*.json 에 저장 후 재실행:")
-        for q in queue:
-            print(f"  - {q.get('source_file')}: {'; '.join(q.get('issues', []))}")
-        print("\n(교정 레코드 형식: records.json의 records[] 항목 + kgco2e 계산값 + "
-              "review{reviewer, reviewed_at, basis})")
-        return
+        # 교정본이 하나도 없으면 재집계할 것이 없다 — 큐 조회만 하고 원장을 건드리지 않는다
+        return {"out": str(out), "merged": False, "queue": queue,
+                "corrected": [], "rejected": [], "summary": None}
 
     merged, remaining = _merge_reviewed(data["records"], queue, corrected)
     # 반려분도 원장에 남긴다(stdout에만 내면 감사추적에서 사라진다). 같은 건의
@@ -344,10 +360,37 @@ def cmd_review(a):
     # 파생이 스테일로 남고, 큐에서 구제된 건은 파생이 아예 안 생긴다.
     merged = [r for r in merged if not r.get("derived_from")]
     scope3.derive_category3(merged, remaining)
-    report.build(merged, remaining, str(out), period=data.get("period"),
-                 inv=data.get("inventory"))
-    print(f"교정 {len(corrected)}건 병합·반려 {len(rejected)}건 기록 → {out}/report.md "
-          f"(잔여 검토대기 {len(remaining)}건)")
+    summary = report.build(merged, remaining, str(out), period=data.get("period"),
+                           inv=data.get("inventory"))
+    return {"out": str(out), "merged": True, "queue": remaining,
+            "corrected": corrected, "rejected": rejected, "summary": summary}
+
+
+def cmd_review(a):
+    """검토 큐 조회 + reviewed/*.json 병합 재집계(human-in-the-loop 완결)."""
+    try:
+        r = review_merge(a.out)
+    except FileNotFoundError as e:
+        sys.exit(str(e))
+
+    if r["rejected"]:
+        print(f"⚠️ 교정본 {len(r['rejected'])}건 반려(합계 미반영):")
+        for rej in r["rejected"]:
+            for i in rej["issues"]:
+                print(f"  - {i}")
+        print()
+
+    if not r["merged"]:
+        print(f"검토 대기 {len(r['queue'])}건. 교정하려면 각 건을 아래 형식으로 "
+              f"{Path(r['out']) / 'reviewed'}/*.json 에 저장 후 재실행:")
+        for q in r["queue"]:
+            print(f"  - {q.get('source_file')}: {'; '.join(q.get('issues', []))}")
+        print("\n(교정 레코드 형식: records.json의 records[] 항목 + kgco2e 계산값 + "
+              "review{reviewer, reviewed_at, basis})")
+        return
+
+    print(f"교정 {len(r['corrected'])}건 병합·반려 {len(r['rejected'])}건 기록 "
+          f"→ {r['out']}/report.md (잔여 검토대기 {len(r['queue'])}건)")
 
 
 def _merge_reviewed(records, queue, corrected):

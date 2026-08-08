@@ -62,6 +62,7 @@ LLM은 **Claude·ChatGPT 등(상용)** 또는 **LM Studio, Ollama 등(로컬)** 
 git clone https://github.com/dillettante/carbonledger.git && cd carbonledger
 pip install -e .          # requests + openpyxl
 # (선택) 고지서 PDF를 다룬다면: pip install -e ".[pdf]"   # pymupdf(AGPL)
+# (선택) AI 에이전트에 도구로 물리려면: pip install -e ".[mcp]"   # MCP 서버
 ```
 
 **비전 LLM 준비** (증빙 이미지 추출용) — 셋 중 하나:
@@ -121,6 +122,15 @@ carbonledger run examples/input --period 2026 --out examples/out
 ```
 철도 거리는 내장 역좌표로 산정되므로 이 예제는 **Kakao 키 없이도** 출장 배출량까지 나온다.
 
+### AI 에이전트로 쓰기 (MCP, 선택)
+
+터미널 대신 Claude Desktop 등에서 대화로 굴리려면 MCP 서버로 등록한다:
+```json
+{ "mcpServers": { "carbonledger": { "command": "carbonledger-mcp",
+                                    "env": { "CARBONLEDGER_BACKEND": "lmstudio" } } } }
+```
+도구 8종(run·review_status·review_merge·get_records·list_factors·inventory_template·diff·selftest)이 등록된다. **계산 도구는 일부러 없다** — 에이전트가 활동량×계수를 직접 하면 단위검사·산술 불변식·감사추적이 사라지므로 파이프라인 전체만 노출하고, 교정본도 CLI와 같은 관문을 통과해야 반영된다. 설정 상세는 [PLAYBOOK.md](PLAYBOOK.md).
+
 ### CSV 형식 (요약 — 상세는 [PLAYBOOK.md](PLAYBOOK.md) §1)
 
 - **commute.csv** (통근): `employee_id,mode,factor_id,oneway_km,workdays` — factor_id는 통근 수단 5종 중 하나.
@@ -169,13 +179,15 @@ carbonledger run examples/input --period 2026 --out examples/out
 
 ```
 carbonledger/
-├── cli.py        # run / selftest / review — 폴더 일괄 처리
+├── cli.py        # run / selftest / review / diff — 폴더 일괄 처리
+├── mcp_server.py # (선택) MCP 서버 — CLI를 감싼 도구 8종. 산정 로직 없음
 ├── extract.py    # 비전 LLM 추출(로컬/OpenAI/Anthropic) + DOC_SPECS + PDF→이미지 렌더
 ├── validate.py   # 검증 관문
 ├── factors.py    # 배출계수 레지스트리 로더(단위 검사)
 ├── calc.py       # Scope별 산정 + 거리
 ├── scope3.py     # Scope 3 카테고리 2~15 통일 CSV 어댑터 + cat3 파생 + cat15 PCAF
 ├── diff.py       # 두 실행 대조 — 기준 변화 검출 + 활동량/계수 요인분해
+├── inventory.py  # 조직 선언 로드·점검·리포트 §0 전재
 ├── report.py     # md·xlsx·records.json
 └── data/         # factors.json · stations.json · categories.json · boundary.md
 ```

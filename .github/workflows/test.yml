@@ -27,3 +27,9 @@ jobs:
         run: python tests/test_backends.py
       - name: 회귀 (재검토 확정 결함 고정)
         run: python tests/test_regressions.py
+      - name: MCP 도구 계약 (SDK 없이 — 구현 함수만)
+        run: python tests/test_mcp.py
+      - name: MCP 서버 등록 (SDK 설치 후)
+        run: |
+          pip install -e ".[mcp]"
+          python tests/test_mcp.py

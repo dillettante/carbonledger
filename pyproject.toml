@@ -10,9 +10,11 @@ dependencies = [
 
 [project.optional-dependencies]
 pdf = ["pymupdf>=1.24"]   # 고지서 PDF→이미지 렌더(Phase 2). 없으면 macOS sips로 폴백
+mcp = ["mcp>=1.2"]        # AI 에이전트가 CLI를 직접 호출(stdio 서버). CLI만 쓰면 불필요
 
 [project.scripts]
 carbonledger = "carbonledger.cli:main"
+carbonledger-mcp = "carbonledger.mcp_server:main"
 
 [build-system]
 requires = ["setuptools>=61"]
