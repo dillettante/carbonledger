@@ -17,7 +17,23 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 from pathlib import Path
+
+# ── 상용 API 제약(공식 문서 기준) ─────────────────────────────────────
+# Anthropic Messages API: 이미지 1장당 10MB(base64 인코딩 후), 요청 전체 32MB(초과 시 413),
+# 이미지 최대 8000×8000px. 로컬 백엔드(LM Studio·Ollama)는 이런 상한이 없다.
+# 사전 점검 없이 보내면 수백 장 배치가 413로 무더기 실패하고, 원인이 응답 본문에만 남는다.
+_B64_OVERHEAD = 4 / 3          # base64는 원본의 약 4/3배
+_ANTHROPIC_MAX_IMAGE_B64 = 10 * 1024 * 1024
+_ANTHROPIC_MAX_REQUEST = 32 * 1024 * 1024
+
+# 재시도: 공식 문서가 '지수 백오프로 재시도'를 지시하는 코드만 고른다.
+# 400(잘못된 요청)·401(인증)·403(권한)·413(크기 초과)은 재시도해도 같은 결과라 즉시 실패시킨다.
+_RETRY_STATUS = {429, 500, 502, 503, 504, 529}
+_MAX_ATTEMPTS = 3              # 공식 SDK 기본값(재시도 2회)과 동일
+_BACKOFF_BASE = 1.0            # 1s → 2s (지수)
+_sleep = time.sleep            # 테스트에서 갈아끼울 수 있게 참조로 둔다
 
 # 백엔드별 엔드포인트·기본 모델
 LM_STUDIO_URL = "http://localhost:1234/v1/chat/completions"
@@ -110,6 +126,8 @@ def _looks_blank(png: bytes) -> bool:
 
 
 _MAX_PDF_PAGES = 3  # ponytail: 고지서는 통상 1~2쪽. 3쪽 초과는 비용·토큰 낭비라 절단(로그로 고지)
+_PDF_DPI = 200            # 고지서 밀집 표가 읽히는 실측 하한
+_PDF_DPI_FALLBACK = 110   # 상한 초과 시 재렌더용(가독성 손실 < 전송 실패)
 
 
 def render_pages(path: str) -> list[bytes]:
@@ -133,7 +151,13 @@ def render_pages(path: str) -> list[bytes]:
             print(f"[알림] {p.name}: {doc.page_count}쪽 중 앞 {_MAX_PDF_PAGES}쪽만 읽음")
         pages = []
         for i in range(min(doc.page_count, _MAX_PDF_PAGES)):
-            png = doc[i].get_pixmap(dpi=200).tobytes("png")
+            png = doc[i].get_pixmap(dpi=_PDF_DPI).tobytes("png")
+            # 큰 지면·고해상도는 상용 API 이미지 상한을 넘을 수 있다. 우리가 DPI를
+            # 정하는 경로이므로 낮춰 다시 렌더하면 해결된다(이미지 라이브러리 불필요).
+            if len(png) * _B64_OVERHEAD > _ANTHROPIC_MAX_IMAGE_B64:
+                png = doc[i].get_pixmap(dpi=_PDF_DPI_FALLBACK).tobytes("png")
+                print(f"[알림] {p.name} {i+1}쪽: 용량이 커 {_PDF_DPI_FALLBACK}dpi로 낮춰 렌더"
+                      "(글자가 작으면 원본을 잘라 나눠 입력할 것)")
             if not _looks_blank(png):
                 pages.append(png)
         if pages:
@@ -219,17 +243,72 @@ def extract(path: str, doc_type: str, model: str | None = None) -> dict:
     return _parse_json(text)
 
 
+def _retry_after(resp) -> float | None:
+    """429·503의 retry-after 헤더(초). 제공자가 준 대기시간이 우리 추측보다 정확하다."""
+    v = (getattr(resp, "headers", None) or {}).get("retry-after")
+    try:
+        return max(0.0, float(v))
+    except (TypeError, ValueError):
+        return None  # HTTP-date 형식이면 지수 백오프로 폴백
+
+
+def _post_with_retry(url: str, **kw):
+    """requests.post + 제한적 재시도. 두 백엔드 호출 경로가 공유한다.
+
+    수백 장 배치에서 429(쿼터)·5xx(일시 장애)는 정상적으로 발생한다 — 한 번 맞고
+    포기하면 멀쩡한 증빙이 검토 대기로 쌓인다. 반대로 400·401·403·413은 재시도해도
+    결과가 같으므로 즉시 실패시킨다(무의미한 대기·과금 방지).
+
+    실패 시 예외 메시지에 **응답 본문을 포함**한다 — raise_for_status의
+    'HTTP 400 Client Error'만으로는 사용자가 원인을 알 수 없다.
+    """
+    import requests
+    last = None
+    for attempt in range(_MAX_ATTEMPTS):
+        try:
+            r = requests.post(url, **kw)
+        except (requests.Timeout, requests.ConnectionError) as e:
+            last = e
+            if attempt == _MAX_ATTEMPTS - 1:
+                raise RuntimeError(
+                    f"네트워크 오류로 {_MAX_ATTEMPTS}회 실패: {type(e).__name__}: {e}") from e
+            _sleep(_BACKOFF_BASE * (2 ** attempt))
+            continue
+
+        code = getattr(r, "status_code", 200)
+        if code < 400:
+            return r
+        body = ""
+        try:
+            body = json.dumps(r.json(), ensure_ascii=False)[:300]
+        except Exception:
+            body = (getattr(r, "text", "") or "")[:300]
+
+        if code in _RETRY_STATUS and attempt < _MAX_ATTEMPTS - 1:
+            wait = _retry_after(r)
+            _sleep(wait if wait is not None else _BACKOFF_BASE * (2 ** attempt))
+            last = code
+            continue
+
+        hint = {
+            401: " — API 키 확인(환경변수)",
+            403: " — 키 권한·조직 설정 확인",
+            413: " — 요청이 너무 큼: PDF 쪽수를 줄이거나 이미지를 축소",
+            429: f" — 쿼터 소진({_MAX_ATTEMPTS}회 재시도 후 포기). 잠시 후 재실행",
+        }.get(code, "")
+        raise RuntimeError(f"API 오류 HTTP {code}{hint}: {body}")
+    raise RuntimeError(f"재시도 소진: {last}")
+
+
 def _call_openai_compat(url: str, key: str | None, prompt: str,
                         pages: list[bytes], model: str) -> str:
     """OpenAI 호환 chat/completions(비전, 다중 이미지). LM Studio·OpenAI 공용."""
-    import requests
     content = [{"type": "text", "text": prompt}]
     content += [{"type": "image_url", "image_url": {"url": _data_url(p)}} for p in pages]
     payload = {"model": model, "temperature": 0,
                "messages": [{"role": "user", "content": content}]}
     headers = {"Authorization": f"Bearer {key}"} if key else {}
-    r = requests.post(url, json=payload, headers=headers, timeout=120)
-    r.raise_for_status()
+    r = _post_with_retry(url, json=payload, headers=headers, timeout=120)
     return r.json()["choices"][0]["message"]["content"]
 
 
@@ -239,7 +318,7 @@ def _call_anthropic(key: str, prompt: str, pages: list[bytes], model: str) -> st
     OpenAI 호환 경로와 달리 요청 형태·인증·응답 파싱이 전부 다르므로 별도 함수다.
     아래 세 가지는 현행 모델(Sonnet 5·Opus 4.7 이후)의 제약이라 어겨선 안 된다.
     """
-    import requests
+    _check_anthropic_size(pages)
     content = [{"type": "image", "source": {"type": "base64",
                 "media_type": _media_type(p), "data": base64.b64encode(p).decode()}}
                for p in pages]
@@ -250,10 +329,28 @@ def _call_anthropic(key: str, prompt: str, pages: list[bytes], model: str) -> st
     # 1024로는 추론 토큰이 먹고 남은 자리에 JSON이 잘려 들어갈 수 있다.
     payload = {"model": model, "max_tokens": 4096,
                "messages": [{"role": "user", "content": content}]}
-    r = requests.post(ANTHROPIC_URL, json=payload, timeout=120, headers={
+    r = _post_with_retry(ANTHROPIC_URL, json=payload, timeout=120, headers={
         "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"})
-    r.raise_for_status()
     return _anthropic_text(r.json().get("content", []))
+
+
+def _check_anthropic_size(pages: list[bytes]):
+    """전송 전 크기 관문 — 413을 맞고 나서가 아니라 보내기 전에 알려 준다.
+
+    고해상도 스캔·다중페이지 PDF는 상한을 쉽게 넘는다. 그냥 보내면 제공자가
+    413으로 끊고(과금 없이도 시간은 버려진다) 원인이 응답 본문에만 남는다.
+    """
+    for i, p in enumerate(pages, 1):
+        b64 = len(p) * _B64_OVERHEAD
+        if b64 > _ANTHROPIC_MAX_IMAGE_B64:
+            raise RuntimeError(
+                f"이미지 {i}쪽이 Anthropic 상한 초과: 약 {b64/1024/1024:.1f}MB "
+                f"(base64 기준 10MB 한도) — 스캔 해상도를 낮추거나 이미지를 축소할 것")
+    total = sum(len(p) for p in pages) * _B64_OVERHEAD
+    if total > _ANTHROPIC_MAX_REQUEST:
+        raise RuntimeError(
+            f"요청 전체가 상한 초과: 약 {total/1024/1024:.1f}MB (32MB 한도, {len(pages)}쪽) "
+            "— PDF를 쪽별로 나누거나 해상도를 낮출 것")
 
 
 def _anthropic_text(blocks: list) -> str:

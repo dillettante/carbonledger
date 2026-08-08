@@ -216,6 +216,119 @@ def test_commercial_backend_requires_key(tmp_path, monkeypatch):
             assert False, f"{name}: 키 없이 통과함"
 
 
+# ── 재시도·크기 관문 (2026-08 추가) ──────────────────────────────────
+
+class _HttpResp(_Resp):
+    """상태코드·헤더까지 갖춘 응답 대역(재시도 판정 검증용)."""
+
+    def __init__(self, status, payload=None, headers=None):
+        super().__init__(payload or {})
+        self.status_code = status
+        self.headers = headers or {}
+        self.text = json.dumps(payload or {}, ensure_ascii=False)
+
+
+def _seq_post(monkeypatch, responses):
+    """호출 순서대로 응답을 돌려주는 requests.post 대역. 대기시간을 기록한다."""
+    import requests
+    log = {"calls": 0, "sleeps": []}
+    monkeypatch.setattr(extract, "_sleep", lambda s: log["sleeps"].append(s))
+
+    def fake_post(url, **kw):
+        r = responses[min(log["calls"], len(responses) - 1)]
+        log["calls"] += 1
+        if isinstance(r, Exception):
+            raise r
+        return r
+    monkeypatch.setattr(requests, "post", fake_post)
+    return log
+
+
+_OK_OPENAI = {"choices": [{"message": {"content": '{"kwh": 100}'}}]}
+
+
+def test_retry_on_429_then_success(tmp_path, monkeypatch):
+    """429는 재시도해야 — 한 번 맞고 포기하면 멀쩡한 증빙이 검토대기로 쌓인다."""
+    log = _seq_post(monkeypatch, [
+        _HttpResp(429, {"error": {"type": "rate_limit_error"}}, {"retry-after": "7"}),
+        _HttpResp(200, _OK_OPENAI),
+    ])
+    out = extract._call_openai_compat(extract.OPENAI_URL, "k", "p", [PNG], "gpt-4o")
+    assert out == '{"kwh": 100}'
+    assert log["calls"] == 2, f"재시도가 일어나지 않음(호출 {log['calls']}회)"
+    assert log["sleeps"] == [7.0], f"retry-after(7초)를 따르지 않음: {log['sleeps']}"
+
+
+def test_retry_on_5xx_backoff(tmp_path, monkeypatch):
+    """529(과부하)·500은 지수 백오프로 재시도한다(공식 문서 지시)."""
+    log = _seq_post(monkeypatch, [
+        _HttpResp(529, {"error": {"type": "overloaded_error"}}),
+        _HttpResp(500, {"error": {"type": "api_error"}}),
+        _HttpResp(200, {"content": [{"type": "text", "text": '{"ok": 1}'}]}),
+    ])
+    out = extract._call_anthropic("k", "p", [PNG], "claude-sonnet-5")
+    assert out == '{"ok": 1}'
+    assert log["calls"] == 3
+    assert log["sleeps"] == [1.0, 2.0], f"지수 백오프 아님: {log['sleeps']}"
+
+
+def test_no_retry_on_permanent_errors(tmp_path, monkeypatch):
+    """400·401·403·413은 재시도 금지 — 같은 결과인데 대기·과금만 늘어난다."""
+    for status in (400, 401, 403, 413):
+        log = _seq_post(monkeypatch, [
+            _HttpResp(status, {"error": {"message": f"모의 {status}"}})])
+        try:
+            extract._call_openai_compat(extract.OPENAI_URL, "k", "p", [PNG], "gpt-4o")
+            assert False, f"{status}가 예외를 내지 않음"
+        except RuntimeError as e:
+            assert str(status) in str(e), f"{status}: 상태코드가 메시지에 없음"
+            # 응답 본문이 메시지에 실려야 원인을 알 수 있다(HTTP 400만으론 무의미)
+            assert f"모의 {status}" in str(e), f"{status}: 응답 본문 누락"
+        assert log["calls"] == 1, f"{status}를 재시도함({log['calls']}회)"
+
+
+def test_retry_exhaustion_reports_clearly(tmp_path, monkeypatch):
+    """계속 429면 결국 실패하되, 사유·재실행 안내가 남아야."""
+    log = _seq_post(monkeypatch, [_HttpResp(429, {"error": {}})])
+    try:
+        extract._call_openai_compat(extract.OPENAI_URL, "k", "p", [PNG], "gpt-4o")
+        assert False, "재시도 소진인데 성공 반환"
+    except RuntimeError as e:
+        assert "429" in str(e) and "재실행" in str(e), f"안내 부족: {e}"
+    assert log["calls"] == extract._MAX_ATTEMPTS, \
+        f"시도 횟수 {log['calls']} ≠ {extract._MAX_ATTEMPTS}"
+
+
+def test_retry_on_network_error(tmp_path, monkeypatch):
+    """네트워크 끊김·타임아웃도 재시도 대상(배치 도중 흔하다)."""
+    import requests
+    log = _seq_post(monkeypatch, [requests.ConnectionError("모의 끊김")])
+    try:
+        extract._call_openai_compat(extract.OPENAI_URL, "k", "p", [PNG], "gpt-4o")
+        assert False, "네트워크 오류인데 성공 반환"
+    except RuntimeError as e:
+        assert "네트워크" in str(e)
+    assert log["calls"] == extract._MAX_ATTEMPTS
+
+
+def test_image_size_gate_before_send(tmp_path, monkeypatch):
+    """상한 초과 이미지는 **보내기 전에** 막는다 — 413을 맞고 나서가 아니라."""
+    log = _seq_post(monkeypatch, [_HttpResp(200, {"content": []})])
+    big = b"\x89PNG\r\n\x1a\n" + b"x" * (9 * 1024 * 1024)  # base64 후 10MB 초과
+    try:
+        extract._call_anthropic("k", "p", [big], "claude-sonnet-5")
+        assert False, "상한 초과 이미지를 전송함"
+    except RuntimeError as e:
+        assert "상한 초과" in str(e) and "축소" in str(e), f"안내 부족: {e}"
+    assert log["calls"] == 0, "관문 전에 이미 전송함(대역폭·시간 낭비)"
+
+    # 정상 크기는 통과해야(관문이 과하게 잡지 않는지)
+    log2 = _seq_post(monkeypatch, [
+        _HttpResp(200, {"content": [{"type": "text", "text": "{}"}]})])
+    extract._call_anthropic("k", "p", [PNG], "claude-sonnet-5")
+    assert log2["calls"] == 1
+
+
 if __name__ == "__main__":
     import tempfile
 
