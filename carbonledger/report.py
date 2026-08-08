@@ -65,7 +65,7 @@ def build(records: list[dict], review_queue: list[dict], out_dir: str,
                    ensure_ascii=False, indent=2), encoding="utf-8")
 
     _write_md(out / "report.md", records, review_queue, s1, s2, s3, total, period, inv)
-    _write_xlsx(out / "report.xlsx", records, review_queue, s1, s2, s3, total, period)
+    _write_xlsx(out / "report.xlsx", records, review_queue, s1, s2, s3, total, period, inv)
 
     return {"scope1": s1, "scope2": s2, "scope3": s3, "total_kgco2e": total,
             "records": len(records), "review": len(review_queue)}
@@ -218,7 +218,7 @@ def _write_md(path, records, review_queue, s1, s2, s3, total, period, inv=None):
     Path(path).write_text("\n".join(L), encoding="utf-8")
 
 
-def _write_xlsx(path, records, review_queue, s1, s2, s3, total, period):
+def _write_xlsx(path, records, review_queue, s1, s2, s3, total, period, inv=None):
     from openpyxl import Workbook
     wb = Workbook()
 
@@ -228,10 +228,33 @@ def _write_xlsx(path, records, review_queue, s1, s2, s3, total, period):
     ws.append(["생성일", str(date.today())])
     ws.append([])
     ws.append(["구분", "배출량(kgCO2eq)", "tCO2eq"])
-    for name, v in [("Scope 1", s1), ("Scope 2", s2), ("Scope 3", s3), ("합계", total)]:
+    # md §1과 동일하게 소계(S1+2)를 낸다 — 규제·감축목표·원단위의 통상 기준이라
+    # xlsx만 유통돼도 헤드라인이 오도되지 않게 한다
+    for name, v in [("Scope 1", s1), ("Scope 2", s2), ("소계 (Scope 1+2)", round(s1 + s2, 3)),
+                    ("Scope 3", s3), ("총계 (Scope 1+2+3)", total)]:
         ws.append([name, v, round(v / 1000, 3)])
     ws.append([])
     ws.append(["면책", DISCLAIMER])
+
+    # 조직 선언 — md §0과 대칭. xlsx 단독 유통 시 "무엇에 대한 숫자인지"가 소실되지 않게
+    wi = wb.create_sheet("조직선언")
+    if inv:
+        wi.append(["항목", "내용"])
+        for key, label, _ in inventory.FIELDS:
+            wi.append([label, str(inv.get(key, "") or "") or "(미기재)"])
+        by = inv.get("base_year") or {}
+        if isinstance(by, dict) and (by.get("year") or by.get("note")):
+            wi.append(["기준연도", f"{by.get('year', '')} {by.get('note', '') or ''}".strip()])
+        for e in inv.get("exclusions") or []:
+            wi.append([f"제외: {e.get('item', '')}", e.get("reason", "") or "(사유 미기재)"])
+        v = inv.get("verification") or {}
+        if v.get("status"):
+            wi.append(["검증(조직 선언)", " · ".join(
+                str(v.get(k, "") or "") for k in ("status", "body", "level", "date") if v.get(k))])
+            wi.append(["주의", "위 검증은 조직 인벤토리에 관한 선언이며 본 산정치의 검증이 아님"])
+        wi.append(["주의", "조직이 기재한 선언의 전재이며 툴은 적정성을 판정하지 않음"])
+    else:
+        wi.append(["조직 선언", "없음 — input/inventory.json 미제공(배출량 산정 결과만 수록)"])
 
     wr = wb.create_sheet("건별_감사추적")
     wr.append(["파일", "Scope", "카테고리", "활동", "활동량", "활동단위",
@@ -257,6 +280,14 @@ def _write_xlsx(path, records, review_queue, s1, s2, s3, total, period):
         wq.append(["파일", "사유"])
         for q in review_queue:
             wq.append([q.get("source_file"), "; ".join(q.get("issues", []))])
+
+    # 수식 주입 봉쇄 — openpyxl은 '='로 시작하는 문자열을 살아있는 수식으로 저장한다.
+    # 파일명·LLM 추출값이 셀에 그대로 들어가므로, 이 리포트의 모든 셀은 '값'으로 강제한다.
+    for sheet in wb.worksheets:
+        for row in sheet.iter_rows():
+            for cell in row:
+                if cell.data_type == "f":
+                    cell.data_type = "s"
 
     wb.save(path)
 

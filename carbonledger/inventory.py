@@ -114,6 +114,15 @@ def render_md(d: dict | None) -> list[str]:
     if str(d.get("notes", "") or "").strip():
         L.append(f"**비고**: {d['notes']}\n")
 
+    # 점검 경고를 리포트에도 남긴다 — stdout에만 내면 리포트 독자(작성자와 다른
+    # 사람일 수 있다)는 '검증완료인데 기관 미기재' 같은 표기 문제를 볼 수 없다.
+    warns = check(d)
+    if warns:
+        L.append("**선언 표기 점검** (산정에는 영향 없음 — 기재 확인 요청):\n")
+        for w in warns:
+            L.append(f"- ⚠️ {w}")
+        L.append("")
+
     L.append("> 위 내용은 **조직이 기재한 선언**을 그대로 옮긴 것이다. "
              "툴은 연결기준의 적정성·제외의 정당성을 판정하지 않는다.\n")
     return L

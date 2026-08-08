@@ -1,8 +1,8 @@
 carbonledger
 Copyright 2026 dillettante
 
-로컬 AI(비전 LLM)로 영수증·고지서·설문을 읽어 조직 온실가스 배출량
-(Scope 1·2·3)과 탄소발자국을 산정하는 CLI.
+비전 LLM(로컬/상용 선택형)으로 영수증·고지서·설문을 읽어 조직 온실가스
+배출량(Scope 1·2·3)과 탄소발자국을 산정하는 CLI.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this software except in compliance with the License.

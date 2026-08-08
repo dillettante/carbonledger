@@ -117,7 +117,9 @@ def _emit_derived(base: dict, factor_id: str, records: list, queue: list):
         rec = factors.get(factor_id)
     except factors.FactorError:
         return  # 계수 미등록 → 파생 생략(리포트 미측정에 남음)
-    if rec["unit"].split("/")[-1] != base["activity_unit"]:
+    # 교정본 등 activity_unit이 없는 레코드에서 KeyError로 죽지 않게 get으로 조회
+    # (validate가 Scope 1·2 교정본에 activity_unit을 강제하므로 통상 도달하지 않음)
+    if rec["unit"].split("/")[-1] != base.get("activity_unit"):
         return
     records.append({
         "source_file": base["source_file"] + "→cat3", "scope": 3, "category": 3,
@@ -152,6 +154,11 @@ def process_pcaf(csv_path: Path, records: list, queue: list):
                 if denom <= 0 or out <= 0:
                     raise ValueError("잔액·분모는 양수")
                 attribution = out / denom
+                # 귀속계수 > 1 = 잔액이 기업가치를 초과 — 정의상 데이터 오류이고,
+                # 피투자사 총배출보다 큰 금융배출이 무경고로 나가게 된다. 반려.
+                if attribution > 1:
+                    raise ValueError(f"귀속계수 {attribution:.4f} > 1 — "
+                                     "outstanding(잔액)이 denominator(기업가치)를 초과. 입력 확인")
                 inv_kg = inv * 1000  # 피투자 배출 tCO2e → kg (감사 불변식: 계수×활동량=배출량)
                 # 출처 미기재는 거부하지 않되(기존 입력 호환) 그 사실을 레코드에 남긴다 —
                 # 리포트 §4에 "출처 미기재"로 드러나므로 조용히 사라지지 않는다.

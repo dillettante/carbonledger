@@ -176,7 +176,15 @@ def scope3_hotel(nights: int) -> dict:
 
 
 def scope3_commute(mode_factor_id: str, annual_km: float) -> dict:
-    """Scope 3 카테고리 7 통근. 연간거리 × 수단계수(commute_* factor_id)."""
+    """Scope 3 카테고리 7 통근. 연간거리 × 수단계수(commute_* factor_id).
+
+    계수의 분모를 그대로 활동단위로 넘기므로 _emit의 단위검사가 자기충족이 된다 —
+    아무 계수나 통과한다는 뜻이다. 그래서 통근 계수(commute_*)만 받도록 여기서 막는다
+    (electricity_kr을 적으면 km가 kWh로 둔갑해 무경고 오산정되던 결함).
+    """
+    if not mode_factor_id.startswith("commute_"):
+        raise factors.FactorError(
+            f"통근 계수가 아님: {mode_factor_id!r} — commute_* 계수만 허용(PLAYBOOK §1-B)")
     denom = factors.get(mode_factor_id)["unit"].split("/")[-1]
     return _emit(mode_factor_id, annual_km, denom)
 

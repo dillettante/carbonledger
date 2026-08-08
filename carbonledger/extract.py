@@ -157,8 +157,12 @@ def render_pages(path: str) -> list[bytes]:
     except Exception:
         pass
 
+    # 원인은 둘 중 하나다: ①손상·백지 PDF ②렌더러 부재(pymupdf 미설치 + 비macOS라
+    # sips도 없음). ②를 ①로 읽으면 사용자가 멀쩡한 PDF를 의심하게 되므로 둘 다 적는다.
     raise RenderError(
-        f"PDF 렌더 실패(백지/손상): {p.name} — 원본 재확보 또는 이미지 변환 후 재시도")
+        f"PDF 렌더 실패: {p.name} — 손상·백지 PDF이거나 렌더러 부재. "
+        "pymupdf 미설치면 `pip install '.[pdf]'`(macOS 외 필수), "
+        "손상이면 원본 재확보 또는 이미지 변환 후 재시도")
 
 
 def render_to_image(path: str) -> bytes:

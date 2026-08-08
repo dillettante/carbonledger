@@ -92,7 +92,14 @@ def _calc_travel(fname, doc_type, rec, period, records, queue):
 
     if not _period_ok(fname, rec.get("date"), period, queue):
         return
-    km = calc.distance_km(rec["origin"], rec["destination"], rec["transport"])
+    # 지도 API의 네트워크 오류·쿼터 소진(429)·키 오류는 이 건의 문제이지 실행 전체의
+    # 문제가 아니다 — 예외를 큐로 보내 배치가 계속 돌게 한다(fail-closed, _calc_bill과 대칭).
+    try:
+        km = calc.distance_km(rec["origin"], rec["destination"], rec["transport"])
+    except Exception as e:
+        queue.append({"source_file": fname, "extracted": rec,
+                      "issues": [f"거리 산정 오류(지도 API 호출 실패): {e}"]})
+        return
     if km is None:
         queue.append({"source_file": fname, "extracted": rec,
                       "issues": ["거리 산정 실패(지도 API 키(Kakao/Naver) 미설정 또는 지명 조회 실패)"]})
@@ -180,6 +187,12 @@ def _process_commute(csv_path: Path, records, queue):
         for i, row in enumerate(csv.DictReader(fh), 1):
             try:
                 oneway = float(row["oneway_km"]); days = int(row["workdays"])
+                # scope3/catN CSV와 같은 fail-closed 관문 — 오타(음수·자릿수)가
+                # 조용히 총계를 왜곡하지 않게 상식 범위를 강제한다
+                if not 0 < oneway <= 500:
+                    raise ValueError(f"편도거리 비상식(0~500km): {oneway}")
+                if not 0 < days <= 366:
+                    raise ValueError(f"근무일 비상식(1~366일): {days}")
                 annual = oneway * 2 * days
                 e = calc.scope3_commute(row["factor_id"], annual)
                 records.append({"source_file": f"{csv_path.name}#{i}", "scope": 3,
@@ -199,6 +212,11 @@ def _process_spend(csv_path: Path, records, queue):
         for i, row in enumerate(csv.DictReader(fh), 1):
             try:
                 krw = float(row["krw"]); f = float(row["factor"])
+                # 음수 지출(환불 오타 등)·음수 계수는 총계를 조용히 깎는다 — 거부
+                if krw <= 0:
+                    raise ValueError(f"지출액 비정상(양수 필요): {krw}")
+                if f <= 0:
+                    raise ValueError(f"계수 비정상(양수 필요): {f}")
                 src = row.get("factor_source", "").strip()
                 if not src:
                     raise ValueError("factor_source(계수 출처) 필수 — 감사추적")
@@ -234,15 +252,19 @@ def cmd_run(a):
     if s3dir.is_dir():
         for f in sorted(s3dir.glob("cat*.csv")):
             m = re.match(r"cat(\d+)", f.name)
-            if not m:
+            if not m:  # catalog.csv 등 — stdout에만 남기면 리포트에서 안 보인다, 큐로
+                queue.append({"source_file": f.name, "issues": [
+                    "파일명에서 카테고리 번호를 못 읽음 — cat{N}_이름.csv 형식 필요"]})
                 continue
             cat = int(m.group(1))
             if cat == 15:
                 scope3.process_pcaf(f, records, queue)
             elif cat in scope3.CSV_CATEGORIES:
                 scope3.process_csv(f, cat, records, queue)
-            else:
-                print(f"[알림] {f.name}: 카테고리 {cat}는 CSV 자동산정 대상 아님 — 건너뜀")
+            else:  # 1·3·6·7 등 — 조용한 건너뜀 대신 큐(리포트 §검토대기에 표시)
+                queue.append({"source_file": f.name, "issues": [
+                    f"카테고리 {cat}는 scope3/ CSV 자동산정 대상 아님"
+                    "(1=spend.csv · 3=자동파생 · 6=travel/ · 7=commute.csv) — 해당 입력 경로 사용"]})
 
     # 카테고리 3(연료·에너지 관련) — Scope 1·2 산정 후 파생(WTT/T&D 계수 있을 때만)
     scope3.derive_category3(records, queue)
@@ -273,6 +295,10 @@ def cmd_review(a):
 
     # 교정본 적재 + **검증 관문**(추출 경로와 동일하게 fail-closed).
     # 관문을 안 태우면 사람이 손으로 만든 JSON이 무검증으로 헤드라인 합계에 직행한다.
+    # 교정 대상은 기존 records 또는 검토 대기에 실재해야 한다 — source_file 오타가
+    # 아무것도 대체하지 않는 유령 레코드로 총계에 진입하는 것을 막는다.
+    known = ({r.get("source_file") for r in data.get("records", [])}
+             | {q.get("source_file") for q in queue})
     corrected, rejected = [], []
     if reviewed_dir.is_dir():
         for jf in sorted(reviewed_dir.glob("*.json")):
@@ -282,6 +308,9 @@ def cmd_review(a):
                 rejected.append({"source_file": jf.name, "issues": [f"JSON 파싱 실패: {e}"]})
                 continue
             issues = validate.validate_corrected_record(c)
+            if c.get("source_file") and c["source_file"] not in known:
+                issues.append(f"교정 대상 없음: {c['source_file']!r}가 records·검토대기 "
+                              "어디에도 없음 — 신규 건은 review가 아니라 입력에 넣어 재실행")
             if issues:
                 rejected.append({"source_file": c.get("source_file") or jf.name,
                                  "issues": [f"교정본 반려({jf.name}): {i}" for i in issues]})
@@ -296,7 +325,7 @@ def cmd_review(a):
                 print(f"  - {i}")
         print()
 
-    if not corrected:
+    if not corrected and not rejected:
         print(f"검토 대기 {len(queue)}건. 교정하려면 각 건을 아래 형식으로 "
               f"{reviewed_dir}/*.json 에 저장 후 재실행:")
         for q in queue:
@@ -306,10 +335,18 @@ def cmd_review(a):
         return
 
     merged, remaining = _merge_reviewed(data["records"], queue, corrected)
-    remaining += rejected  # 반려분은 검토 대기로 남긴다(조용히 사라지지 않음)
+    # 반려분도 원장에 남긴다(stdout에만 내면 감사추적에서 사라진다). 같은 건의
+    # 종전 큐 항목은 대체한다 — 단순 append면 review 재실행마다 반려가 중복 누적된다.
+    rej_keys = {r.get("source_file") for r in rejected}
+    remaining = [q for q in remaining if q.get("source_file") not in rej_keys] + rejected
+    # 교정으로 Scope 1·2 활동량이 바뀌면 cat3(연료·에너지 상류) 파생도 달라져야 한다.
+    # 기존 파생을 전부 버리고 병합본에서 다시 만든다 — 안 그러면 옛 활동량 기반
+    # 파생이 스테일로 남고, 큐에서 구제된 건은 파생이 아예 안 생긴다.
+    merged = [r for r in merged if not r.get("derived_from")]
+    scope3.derive_category3(merged, remaining)
     report.build(merged, remaining, str(out), period=data.get("period"),
                  inv=data.get("inventory"))
-    print(f"교정 {len(corrected)}건 병합 재집계 완료 → {out}/report.md "
+    print(f"교정 {len(corrected)}건 병합·반려 {len(rejected)}건 기록 → {out}/report.md "
           f"(잔여 검토대기 {len(remaining)}건)")
 
 

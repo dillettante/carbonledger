@@ -22,12 +22,23 @@ def _stations() -> set[str]:
     return set(json.loads(_STATIONS.read_text(encoding="utf-8"))["stations"])
 
 
+# 계수가 등재된 교통수단만 자동 산정한다. 추출 프롬프트는 '기타'도 허용하므로
+# (택시·선박 등을 억지로 버스로 분류하지 않게), 그 값은 여기서 걸러 검토 큐로 보낸다.
+# 이 관문이 없으면 '기타'가 calc._TRANSPORT 조회에서 KeyError로 실행 전체를 죽인다.
+_TRANSPORT_ALLOW = ("철도", "항공", "버스")
+
+
 def validate_transport(rec: dict) -> list[str]:
     """교통 영수증 레코드 검증(관문 ①②)."""
     issues = []
     for f in ("transport", "origin", "destination"):
         if not rec.get(f):
             issues.append(f"필수 누락: {f}")
+
+    t = rec.get("transport")
+    if t and t not in _TRANSPORT_ALLOW:
+        issues.append(f"산정 불가 수단(계수 미등재): {t!r} — 택시·선박 등은 수기 확인"
+                      f"(자동 산정: {', '.join(_TRANSPORT_ALLOW)})")
 
     amt = _num(rec.get("amount"))  # LLM이 47900.0·"47,900"으로 줘도 관대 파싱
     if rec.get("amount") is not None and (amt is None or amt <= 0):
@@ -96,7 +107,9 @@ def validate_gas(rec: dict) -> list[str]:
     """도시가스 고지서 검증(관문 ①)."""
     issues = []
     usage = _num(rec.get("usage"))
-    unit = rec.get("unit", "").replace("㎥", "m3").strip()
+    # LLM은 지침대로 unit을 null로 줄 수 있다 — get의 기본값은 키 '부재' 시에만
+    # 적용되므로 (or "")로 값 null까지 방어해야 .replace가 죽지 않는다.
+    unit = (rec.get("unit") or "").replace("㎥", "m3").strip()
     if usage is None or usage <= 0:
         issues.append(f"사용량 비정상: {rec.get('usage')!r}")
     if unit not in ("m3", "Nm3", "MJ"):
@@ -160,21 +173,39 @@ def validate_corrected_record(rec: dict) -> list[str]:
     검사: 필수 필드 · 배출량 부호 · 계수×활동량=배출량 산술 일치 · 교정 이력(누가·언제·왜).
     """
     issues = []
-    if not (rec.get("source_file") or "").strip():
+    sf = (rec.get("source_file") or "").strip()
+    if not sf:
         issues.append("source_file 누락 — 어느 건의 교정인지 특정 불가")
+    if "→cat3" in sf:
+        issues.append("자동 파생(cat3) 건은 직접 교정 불가 — 원본 Scope 1·2 건을 "
+                      "교정하면 재파생된다(파생·원본 이중 수정 방지)")
     if rec.get("scope") not in (1, 2, 3):
         issues.append(f"scope 이상: {rec.get('scope')!r} (1·2·3 중 하나)")
+    # Scope 3는 카테고리가 없으면 §2 카테고리 표에 잡히지 않아 표합과 총계가 어긋난다
+    if rec.get("scope") == 3 and rec.get("category") not in range(1, 16):
+        issues.append(f"category 이상: {rec.get('category')!r} (Scope 3 교정본은 1~15 필수)")
 
     kg = _num(rec.get("kgco2e"))
     if kg is None or kg < 0:
         issues.append(f"배출량(kgco2e) 비정상: {rec.get('kgco2e')!r}")
 
-    # 계수·활동량이 있으면 산술 재현 확인 — 감사추적의 핵심 불변식
+    # 계수×활동량=배출량 산술 재현 — 감사추적의 핵심 불변식.
+    # 둘을 아예 안 적으면 산술 검증 자체를 우회하게 되므로 존재도 강제한다.
     fv, av = _num(rec.get("factor_value")), _num(rec.get("activity_value"))
+    if fv is None or av is None:
+        issues.append("factor_value·activity_value 필수 — 계수×활동량=배출량 검증이 "
+                      "교정 관문의 핵심(둘 다 수치로 기재)")
     if kg is not None and fv is not None and av is not None:
         expect = fv * av
         if abs(expect - kg) > max(0.01, 0.01 * max(abs(kg), 1)):
             issues.append(f"산술 불일치: 계수{fv}×활동량{av}={expect:.3f} vs 배출량 {kg}")
+
+    # Scope 1·2 교정본은 factor_id·activity_unit도 필수 — cat3(연료·에너지 상류)
+    # 자동 재파생이 이 두 필드로 계수를 찾고 단위를 맞춘다(없으면 파생이 조용히 빠짐)
+    if rec.get("scope") in (1, 2) and not (
+            (rec.get("factor_id") or "").strip() and (rec.get("activity_unit") or "").strip()):
+        issues.append("Scope 1·2 교정본은 factor_id·activity_unit 필수 — "
+                      "카테고리 3 자동 재파생에 필요")
 
     # 교정 이력 강제(통제) — 누가·언제·무엇을 근거로 고쳤는지 없으면 병합 거부
     rv = rec.get("review") or {}
@@ -223,6 +254,12 @@ def selftest():
     assert any("필수" in i for i in validate_transport({**ok, "origin": None})), "필수누락 미적발"
     assert any("날짜" in i for i in validate_transport({**ok, "date": "2026/07/12"})), "날짜 미적발"
 
+    # 계수 미등재 수단(기타·택시)은 큐로 — KeyError 크래시 회귀 방지
+    assert any("산정 불가 수단" in i for i in validate_transport({**ok, "transport": "기타"})), \
+        "기타 수단 미적발(KeyError 크래시 경로)"
+    assert any("산정 불가 수단" in i for i in validate_transport({**ok, "transport": "택시"})), \
+        "택시 미적발"
+
     assert validate_hotel({"nights": 2, "checkin": "2026-07-12"}) == [], "정상 숙박 통과해야"
     assert any("박수" in i for i in validate_hotel({"nights": 0})), "박수0 미적발"
 
@@ -261,6 +298,8 @@ def selftest():
         "kWh 상한 미적발"
 
     # 도시가스 단위·상한
+    assert any("단위" in i for i in validate_gas({"usage": 50, "unit": None})), \
+        "unit=null이 크래시 없이 큐 사유를 내야(AttributeError 회귀 방지)"
     assert validate_gas({"usage": 50, "unit": "m3"}) == [], "정상 가스 통과해야"
     assert validate_gas({"usage": 50, "unit": "㎥"}) == [], "㎥ 글리프 정상처리해야"
     assert any("단위" in i for i in validate_gas({"usage": 50, "unit": "L"})), "가스 단위 미적발"
