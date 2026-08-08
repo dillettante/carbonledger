@@ -24,6 +24,10 @@ PLAYBOOK §"AI 에이전트로 굴리기"의 경고: **배출량 계산은 에�
 stdio 전용이다(로컬 증빙을 다루므로 원격 HTTP는 부적절 — 기밀 처리 원칙과 충돌).
 MCP SDK는 선택 의존성(`pip install ".[mcp]"`)이고, 이 파일의 구현 함수들은
 SDK 없이도 임포트·테스트된다(도구 등록만 SDK를 요구).
+
+SDK 1.x·2.x를 모두 지원한다 — 2.x에서 `FastMCP`가 `mcp.server.MCPServer`로
+옮겨졌으나 우리가 쓰는 생성자·tool·run 시그니처는 같아 임포트만 갈라 흡수한다
+(주석 kwargs는 camelCase로 주면 2.x가 alias로 받는다 — 실측 확인).
 """
 import json
 from pathlib import Path
@@ -290,12 +294,26 @@ carbonledger — 영수증·고지서·CSV로 조직 온실가스 배출량(Scop
 """
 
 
+def _server_class():
+    """SDK 메이저 버전에 맞는 서버 클래스.
+
+    mcp 2.x는 `mcp.server.MCPServer`, 1.x는 `mcp.server.fastmcp.FastMCP`다
+    (경로·이름만 다르고 우리가 쓰는 생성자·tool·run 시그니처는 같다).
+    둘 다 없으면 ImportError — main이 설치 안내로 바꾼다.
+    """
+    try:
+        from mcp.server import MCPServer          # mcp >= 2
+        return MCPServer
+    except ImportError:
+        from mcp.server.fastmcp import FastMCP    # mcp 1.x
+        return FastMCP
+
+
 def build_server():
-    """FastMCP 서버 구성. SDK가 없으면 ImportError(main이 안내 메시지로 변환)."""
-    from mcp.server.fastmcp import FastMCP
+    """MCP 서버 구성. SDK가 없으면 ImportError(main이 안내 메시지로 변환)."""
     from mcp.types import ToolAnnotations
 
-    mcp = FastMCP("carbonledger_mcp", instructions=SERVER_INSTRUCTIONS)
+    mcp = _server_class()("carbonledger_mcp", instructions=SERVER_INSTRUCTIONS)
 
     def _ann(title, *, read_only, open_world=False, idempotent=False):
         return ToolAnnotations(title=title, readOnlyHint=read_only,

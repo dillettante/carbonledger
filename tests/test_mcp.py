@@ -22,6 +22,18 @@ except ImportError:
     HAS_SDK = False
 
 
+def _attr(obj, snake: str):
+    """SDK 버전 차이를 흡수해 필드를 읽는다 — 1.x는 camelCase, 2.x는 snake_case.
+
+    서버 코드(mcp_server.py)는 한 벌로 족하다: 생성 시 camelCase kwargs를 2.x도
+    alias로 받아 주기 때문이다(실측 확인). 읽는 쪽만 여기서 흡수한다.
+    """
+    if hasattr(obj, snake):
+        return getattr(obj, snake)
+    head, *rest = snake.split("_")
+    return getattr(obj, head + "".join(w.title() for w in rest))
+
+
 def _mini_input(tmp_path: Path) -> Path:
     """LLM 없이 도는 최소 입력(CSV만) — 정상 2건 + 관문 위반 1건."""
     inp = tmp_path / "input"
@@ -193,18 +205,22 @@ def test_server_registration(tmp_path):
                      "carbonledger_list_factors", "carbonledger_inventory_template",
                      "carbonledger_diff", "carbonledger_selftest"}, names
 
+    def hint(tool, name):
+        """주석 값 읽기(SDK 버전 차이 흡수)."""
+        return _attr(tool.annotations, name)
+
     by = {t.name: t for t in tools}
     # 쓰기 도구가 readOnly로 표시되면 클라이언트가 승인 없이 돌릴 수 있다
-    assert by["carbonledger_run"].annotations.readOnlyHint is False
-    assert by["carbonledger_review_merge"].annotations.readOnlyHint is False
+    assert hint(by["carbonledger_run"], "read_only_hint") is False
+    assert hint(by["carbonledger_review_merge"], "read_only_hint") is False
     # run은 증빙을 외부 제공자로 보낼 수 있다(상용 백엔드) → openWorld
-    assert by["carbonledger_run"].annotations.openWorldHint is True
-    assert by["carbonledger_review_status"].annotations.readOnlyHint is True
+    assert hint(by["carbonledger_run"], "open_world_hint") is True
+    assert hint(by["carbonledger_review_status"], "read_only_hint") is True
 
     for t in tools:
         assert t.description and len(t.description) > 80, f"{t.name}: 설명 부실"
-        assert t.outputSchema, f"{t.name}: outputSchema 없음(구조화 출력 불가)"
-        assert t.annotations.destructiveHint is False
+        assert _attr(t, "output_schema"), f"{t.name}: outputSchema 없음(구조화 출력 불가)"
+        assert hint(t, "destructive_hint") is False
 
 
 if __name__ == "__main__":
