@@ -70,14 +70,21 @@ pip install -e .          # requests + openpyxl
 | 백엔드 | 설정 | 특징 |
 |---|---|---|
 | **Claude** | `CARBONLEDGER_BACKEND=anthropic` + `ANTHROPIC_API_KEY` | 정확도 높음. ⚠️ 증빙 이미지가 Anthropic으로 전송 · **실호출 미검증**(아래 한계 참조) |
-| **ChatGPT** | `CARBONLEDGER_BACKEND=openai` + `OPENAI_API_KEY` | 정확도 높음. ⚠️ 증빙 이미지가 OpenAI로 전송 · 호환 경로 실호출 확인(아래 한계 참조) |
+| **ChatGPT** | `CARBONLEDGER_BACKEND=openai` + `OPENAI_API_KEY` | 정확도 높음. ⚠️ 증빙 이미지가 OpenAI로 전송 · OpenAI 호환 경로는 실호출 검증됨(Gemini로 파이프라인 끝까지) |
 | **로컬(LM Studio)** | 기본값. [LM Studio](https://lmstudio.ai) 설치 후 `qwen/qwen3-vl-4b` 로드 | **증빙이 외부로 안 나감** — 기밀·개인정보 증빙에 권장. **실물 고지서로 검증된 경로** |
 | **로컬(Ollama)** | `CARBONLEDGER_BACKEND=ollama` + `ollama pull qwen3-vl:4b` | 증빙이 외부로 안 나감. 터미널 사용자용 |
+| **그 밖의 아무 API** | `CARBONLEDGER_BACKEND=custom` + `CARBONLEDGER_BASE_URL`·`CARBONLEDGER_MODEL`(+선택 `CARBONLEDGER_API_KEY`) | OpenAI 호환이면 무엇이든 — Gemini·xAI·OpenRouter·사내 vLLM. **Gemini로 실호출 검증됨** |
 
 ```bash
 # 예: Claude로 쓰기
 export CARBONLEDGER_BACKEND=anthropic
 export ANTHROPIC_API_KEY="sk-ant-..."
+
+# 예: 목록에 없는 제공자(Gemini) 쓰기 — 주소·모델만 알려주면 된다
+export CARBONLEDGER_BACKEND=custom
+export CARBONLEDGER_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai"
+export CARBONLEDGER_API_KEY="..."      # 인증 없는 사내 서버면 생략
+export CARBONLEDGER_MODEL="gemini-2.5-flash"
 ```
 모델은 `--model`로 바꿀 수 있다(미지정 시 백엔드별 기본: qwen3-vl-4b / gpt-4o / claude-sonnet-5).
 **증빙에 개인정보·영업비밀이 있으면 로컬 백엔드를 쓰라** — 상용 백엔드는 이미지가 제공자 서버로 나간다.

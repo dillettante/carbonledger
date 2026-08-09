@@ -450,7 +450,9 @@ def main():
     r.add_argument("input", help="입력 폴더(scope1-fuel/·travel/·commute.csv 등)")
     r.add_argument("--period", help="보고기간 연도(예: 2026). 밖의 건은 미포함")
     r.add_argument("--model", default=None,
-                   help="비전 모델(미지정 시 백엔드별 기본: lmstudio/ollama=qwen3-vl-4b·openai=gpt-4o·anthropic=claude-sonnet-5)")
+                   help="비전 모델(미지정 시 CARBONLEDGER_MODEL 또는 백엔드 기본값: "
+                        "lmstudio/ollama=qwen3-vl-4b·openai=gpt-4o·anthropic=claude-sonnet-5. "
+                        "backend=custom은 기본값이 없어 반드시 지정)")
     r.add_argument("--out", help="출력 폴더(기본: <입력>/out)")
     r.set_defaults(func=cmd_run)
 

@@ -4,12 +4,22 @@
 문서유형별 차이는 DOC_SPECS(프롬프트·필드) 데이터로만 갈린다 — 엔진 코드는 하나.
 PDF는 render_to_image()가 이미지로 렌더한다(폴백 사다리 + 백지 방어).
 
-백엔드 4종 (CARBONLEDGER_BACKEND 환경변수, 기본 lmstudio):
+백엔드 (CARBONLEDGER_BACKEND 환경변수, 기본 lmstudio):
   · lmstudio  — 로컬 LM Studio(OpenAI 호환, localhost:1234). **증빙이 외부로 안 나감**(기밀에 권장).
   · ollama    — 로컬 Ollama(OpenAI 호환, localhost:11434). **증빙이 외부로 안 나감**. `ollama pull qwen3-vl:4b`.
   · openai    — OpenAI API(OPENAI_API_KEY). ⚠️ 증빙 이미지가 OpenAI로 전송됨.
   · anthropic — Anthropic Claude(ANTHROPIC_API_KEY). ⚠️ 증빙 이미지가 Anthropic으로 전송됨.
+  · custom    — **임의의 OpenAI 호환 제공자**. CARBONLEDGER_BASE_URL로 주소를 지정한다.
+                Gemini·xAI·OpenRouter·Together·사내 vLLM 등 어디든 코드 수정 없이 붙는다.
 상용 백엔드는 로컬 모델보다 정확도가 높지만, **기밀 증빙이 외부 제공자로 나간다**(개인정보·영업비밀 주의).
+
+## 왜 'custom'이 있나
+
+이름 붙은 4종만 지원하면 새 제공자가 나올 때마다 코드를 고쳐야 하고, 사용자는
+그때까지 못 쓴다. 그런데 OpenAI 호환 규격을 따르는 제공자는 **주소와 모델명만
+다를 뿐 요청·응답 형태가 같다** — 이미 `_call_openai_compat` 한 함수가 로컬 2종과
+OpenAI를 함께 처리하고 있었다. 그 주소를 사용자가 정할 수 있게 연 것이 custom이다.
+새 코드 경로가 아니라 기존 경로의 매개변수화이므로 검증 표면이 늘지 않는다.
 """
 import base64
 import json
@@ -45,7 +55,30 @@ DEFAULT_MODELS = {
     "ollama": "qwen3-vl:4b",
     "openai": "gpt-4o",
     "anthropic": "claude-sonnet-5",
+    # custom은 제공자를 모르므로 기본 모델을 정할 수 없다 — 사용자가 --model 또는
+    # CARBONLEDGER_MODEL로 반드시 지정한다(추측하면 엉뚱한 모델로 과금된다).
+    "custom": None,
 }
+BACKENDS = tuple(DEFAULT_MODELS)
+
+
+def _custom_url() -> str:
+    """custom 백엔드의 엔드포인트. 끝이 /chat/completions가 아니면 붙여 준다.
+
+    사용자는 보통 제공자 문서의 'base URL'(…/v1)을 그대로 복사해 온다.
+    그때마다 404를 내는 대신 관용적으로 받아 준다 — 단, 무엇으로 해석했는지는
+    오류 시 메시지에 드러난다.
+    """
+    base = (os.environ.get("CARBONLEDGER_BASE_URL") or "").strip().rstrip("/")
+    if not base:
+        raise RuntimeError(
+            "CARBONLEDGER_BASE_URL 미설정 (CARBONLEDGER_BACKEND=custom)\n"
+            "  예) Gemini : https://generativelanguage.googleapis.com/v1beta/openai\n"
+            "      xAI    : https://api.x.ai/v1\n"
+            "      사내 vLLM: http://10.0.0.5:8000/v1")
+    if base.endswith("/chat/completions"):
+        return base
+    return base + "/chat/completions"
 
 # ── 문서유형 스펙: 프롬프트 + 기대 필드 ────────────────────────────
 # scope/category는 폴더가 선언(cli), 여기선 '무엇을 뽑나'만 정의.
@@ -212,20 +245,36 @@ def backend() -> str:
 
 
 def resolve_model(model: str | None) -> str:
-    """--model 미지정 시 백엔드별 기본 모델. 지정 시 그대로."""
-    return model or DEFAULT_MODELS.get(backend(), DEFAULT_MODELS["lmstudio"])
+    """모델 결정: --model > CARBONLEDGER_MODEL > 백엔드 기본값.
+
+    custom 백엔드는 제공자를 모르므로 기본값이 없다 — 지정하지 않으면 실행 전에
+    막는다(엉뚱한 모델명으로 건별 4xx가 흩어지는 것보다 낫다).
+    """
+    m = model or os.environ.get("CARBONLEDGER_MODEL") or DEFAULT_MODELS.get(backend())
+    if not m:
+        raise RuntimeError(
+            f"모델 미지정 (CARBONLEDGER_BACKEND={backend()}) — "
+            "--model 또는 CARBONLEDGER_MODEL로 지정할 것"
+            "\n  예) --model gemini-2.5-flash / grok-4 / qwen2.5-vl-7b-instruct")
+    return m
 
 
 def extract(path: str, doc_type: str, model: str | None = None) -> dict:
     """증빙 → DOC_SPECS[doc_type] 프롬프트로 비전 LLM 추출. 결과 dict 반환.
 
-    백엔드(lmstudio/openai/anthropic)는 CARBONLEDGER_BACKEND로 선택. 상용은 이미지가 외부 전송됨.
+    백엔드는 CARBONLEDGER_BACKEND로 선택(§모듈 독스트링). 상용·custom은 이미지가 외부 전송됨.
     PDF는 페이지별로 렌더돼(최대 3쪽) 한 번의 호출에 모두 들어간다.
     """
     spec = DOC_SPECS[doc_type]
+    b = backend()
+    # 백엔드 검증이 모델 해석보다 먼저다 — 오타 백엔드는 기본 모델이 없어서
+    # 순서가 반대면 '모델 미지정'이라는 엉뚱한 사유가 나온다(진짜 원인은 오타).
+    if b not in BACKENDS:
+        raise RuntimeError(
+            f"알 수 없는 백엔드: {b!r} — 사용 가능: {', '.join(BACKENDS)}"
+            "\n  임의 제공자는 CARBONLEDGER_BACKEND=custom + CARBONLEDGER_BASE_URL")
     pages = render_pages(path)
     model = resolve_model(model)
-    b = backend()
     if b == "anthropic":
         key = os.environ.get("ANTHROPIC_API_KEY")
         if not key:
@@ -236,6 +285,10 @@ def extract(path: str, doc_type: str, model: str | None = None) -> dict:
         if not key:  # 키 없이 호출하면 건별 401이 흩어진다 — 선검사로 한 번에 알림
             raise RuntimeError("OPENAI_API_KEY 미설정 (CARBONLEDGER_BACKEND=openai)")
         text = _call_openai_compat(OPENAI_URL, key, spec["prompt"], pages, model)
+    elif b == "custom":
+        # 임의 OpenAI 호환 제공자. 키는 선택 — 사내 vLLM처럼 인증 없는 경우가 있다.
+        key = os.environ.get("CARBONLEDGER_API_KEY") or None
+        text = _call_openai_compat(_custom_url(), key, spec["prompt"], pages, model)
     elif b == "ollama":  # 로컬, 키 불필요
         text = _call_openai_compat(OLLAMA_URL, None, spec["prompt"], pages, model)
     else:  # lmstudio (로컬, 키 불필요)
@@ -399,10 +452,49 @@ def selftest():
     assert _media_type(b"\xff\xd8\xff\xe0") == "image/jpeg", "JPEG 판정 실패"
 
     # 백엔드 기본 모델 해석
-    assert resolve_model(None) in DEFAULT_MODELS.values(), "기본 모델 해석 실패"
     assert resolve_model("custom-x") == "custom-x", "지정 모델 무시됨"
-    assert backend() in ("lmstudio", "ollama", "openai", "anthropic"), "백엔드 값 이상"
-    assert set(DEFAULT_MODELS) == {"lmstudio", "ollama", "openai", "anthropic"}, "기본모델표 불일치"
+    assert set(DEFAULT_MODELS) == {"lmstudio", "ollama", "openai", "anthropic", "custom"}, \
+        "기본모델표 불일치"
+
+    # 백엔드 해석: 환경변수를 건드리므로 원복을 보장한다
+    _env_backup = {k: os.environ.get(k) for k in
+                   ("CARBONLEDGER_BACKEND", "CARBONLEDGER_BASE_URL", "CARBONLEDGER_MODEL")}
+    try:
+        for k in _env_backup:
+            os.environ.pop(k, None)
+        assert backend() == "lmstudio", "기본 백엔드는 lmstudio"
+        assert resolve_model(None) == DEFAULT_MODELS["lmstudio"], "기본 모델 해석 실패"
+
+        # custom: 기본 모델이 없으므로 미지정은 실행 전에 막아야
+        os.environ["CARBONLEDGER_BACKEND"] = "custom"
+        try:
+            resolve_model(None)
+            assert False, "custom인데 모델 미지정을 통과시킴"
+        except RuntimeError as e:
+            assert "모델 미지정" in str(e)
+        os.environ["CARBONLEDGER_MODEL"] = "gemini-2.5-flash"
+        assert resolve_model(None) == "gemini-2.5-flash", "CARBONLEDGER_MODEL 미반영"
+        assert resolve_model("override") == "override", "--model이 환경변수를 못 이김"
+
+        # custom: BASE_URL 미설정은 안내와 함께 실패, 설정 시 경로 보정
+        os.environ.pop("CARBONLEDGER_BASE_URL", None)
+        try:
+            _custom_url()
+            assert False, "BASE_URL 없이 통과함"
+        except RuntimeError as e:
+            assert "CARBONLEDGER_BASE_URL" in str(e)
+        os.environ["CARBONLEDGER_BASE_URL"] = "https://x.example/v1"
+        assert _custom_url() == "https://x.example/v1/chat/completions", "경로 보정 실패"
+        os.environ["CARBONLEDGER_BASE_URL"] = "https://x.example/v1/chat/completions"
+        assert _custom_url() == "https://x.example/v1/chat/completions", "완전경로를 중복 부착"
+        os.environ["CARBONLEDGER_BASE_URL"] = "https://x.example/v1/"
+        assert _custom_url() == "https://x.example/v1/chat/completions", "말미 슬래시 처리 실패"
+    finally:
+        for k, v in _env_backup.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
     print("extract selftest 통과 ✅")
 
 

@@ -329,6 +329,87 @@ def test_image_size_gate_before_send(tmp_path, monkeypatch):
     assert log2["calls"] == 1
 
 
+# ── custom 백엔드: 임의 OpenAI 호환 제공자 ────────────────────────────
+
+def test_custom_backend_routes_to_configured_url(tmp_path, monkeypatch):
+    """CARBONLEDGER_BASE_URL로 지정한 제공자에 실제로 요청이 가는가."""
+    import os
+    png = tmp_path / "전기_202605.png"
+    png.write_bytes(PNG)
+
+    seen = _capture(monkeypatch, {"choices": [{"message": {"content": '{"kwh": 42}'}}]})
+    monkeypatch.setattr(os, "environ", {
+        "CARBONLEDGER_BACKEND": "custom",
+        "CARBONLEDGER_BASE_URL": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "CARBONLEDGER_API_KEY": "test-key",
+        "CARBONLEDGER_MODEL": "gemini-2.5-flash",
+    })
+    out = extract.extract(str(png), "electricity")
+
+    assert out == {"kwh": 42}, "응답 파싱 실패"
+    assert seen["url"].endswith("/chat/completions"), f"경로 보정 실패: {seen['url']}"
+    assert seen["url"].startswith("https://generativelanguage.googleapis.com"), seen["url"]
+    assert seen["headers"].get("Authorization") == "Bearer test-key", "키가 안 실림"
+    assert seen["json"]["model"] == "gemini-2.5-flash", "모델 미반영"
+    # OpenAI 호환 규격: 이미지가 image_url(data URL)로 실려야
+    parts = seen["json"]["messages"][0]["content"]
+    assert any(p.get("type") == "image_url" for p in parts), "이미지 미첨부"
+
+
+def test_custom_backend_optional_key(tmp_path, monkeypatch):
+    """사내 vLLM 등 인증 없는 제공자도 써야 한다 — 키는 선택."""
+    import os
+    png = tmp_path / "전기.png"
+    png.write_bytes(PNG)
+    seen = _capture(monkeypatch, {"choices": [{"message": {"content": "{}"}}]})
+    monkeypatch.setattr(os, "environ", {
+        "CARBONLEDGER_BACKEND": "custom",
+        "CARBONLEDGER_BASE_URL": "http://10.0.0.5:8000/v1",
+        "CARBONLEDGER_MODEL": "qwen2.5-vl-7b-instruct",
+    })
+    extract.extract(str(png), "electricity")
+    assert "Authorization" not in seen["headers"], "키 없는데 빈 인증 헤더를 보냄"
+    assert seen["url"] == "http://10.0.0.5:8000/v1/chat/completions"
+
+
+def test_custom_backend_requires_config(tmp_path, monkeypatch):
+    """설정 누락은 실행 전에 안내와 함께 막는다(건별 4xx가 흩어지지 않게)."""
+    import os
+    png = tmp_path / "전기.png"
+    png.write_bytes(PNG)
+
+    # BASE_URL 누락
+    monkeypatch.setattr(os, "environ", {"CARBONLEDGER_BACKEND": "custom",
+                                        "CARBONLEDGER_MODEL": "m"})
+    try:
+        extract.extract(str(png), "electricity")
+        assert False, "BASE_URL 없이 통과함"
+    except RuntimeError as e:
+        assert "CARBONLEDGER_BASE_URL" in str(e) and "Gemini" in str(e), f"안내 부족: {e}"
+
+    # 모델 누락(custom은 기본값이 없다)
+    monkeypatch.setattr(os, "environ", {"CARBONLEDGER_BACKEND": "custom",
+                                        "CARBONLEDGER_BASE_URL": "https://x/v1"})
+    try:
+        extract.extract(str(png), "electricity")
+        assert False, "모델 없이 통과함"
+    except RuntimeError as e:
+        assert "모델 미지정" in str(e), f"안내 부족: {e}"
+
+
+def test_unknown_backend_is_rejected(tmp_path, monkeypatch):
+    """오타 백엔드를 조용히 lmstudio로 흘리면 진짜 원인이 끝까지 안 드러난다."""
+    import os
+    png = tmp_path / "전기.png"
+    png.write_bytes(PNG)
+    monkeypatch.setattr(os, "environ", {"CARBONLEDGER_BACKEND": "gemini"})  # 흔한 오타
+    try:
+        extract.extract(str(png), "electricity")
+        assert False, "알 수 없는 백엔드를 통과시킴"
+    except RuntimeError as e:
+        assert "알 수 없는 백엔드" in str(e) and "custom" in str(e), f"안내 부족: {e}"
+
+
 if __name__ == "__main__":
     import tempfile
 

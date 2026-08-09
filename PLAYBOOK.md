@@ -53,6 +53,7 @@ carbonledger selftest        # "전 모듈 selftest 통과 ✅" 나오면 OK
 | **B. ChatGPT (OpenAI)** | `OPENAI_API_KEY` 발급 | 정확도 높음. ⚠️ **사진이 OpenAI 서버로 전송됨** |
 | **C. 로컬 — LM Studio** | 앱 설치 후 모델 로드 | ⭐ **사진이 외부로 안 나감**(기밀·개인정보에 안전). 무료. GUI 앱 |
 | **D. 로컬 — Ollama** | `ollama pull qwen3-vl:4b` | ⭐ 사진이 외부로 안 나감. 무료. 터미널 사용자에게 익숙 |
+| **E. 그 밖의 아무 API** | `CARBONLEDGER_BACKEND=custom` + 주소·모델 지정 | Gemini·xAI·OpenRouter·사내 서버 등 **OpenAI 호환이면 무엇이든**. ⚠️ 전송 여부는 제공자에 따름 |
 
 **어느 걸 고르나?**
 - 영수증에 **개인정보·영업비밀**이 있다 → **C 또는 D(로컬)**. 증빙이 내 컴퓨터 밖으로 안 나갑니다. GUI가 편하면 C, 이미 Ollama를 쓰고 있으면 D.
@@ -84,6 +85,27 @@ ollama pull qwen3-vl:4b
 export CARBONLEDGER_BACKEND=ollama
 # 실행 시 자동으로 qwen3-vl:4b 사용. curl localhost:11434/v1/models 로 확인
 ```
+
+**방법 E — 그 밖의 아무 API 쓰기** (위 목록에 없는 제공자):
+
+OpenAI 호환 규격을 따르는 서비스면 **코드 수정 없이** 붙습니다. 제공자 문서의 base URL과 모델명만 알려주면 됩니다.
+```bash
+export CARBONLEDGER_BACKEND=custom
+export CARBONLEDGER_BASE_URL="...제공자 주소..."   # 문서의 base URL 그대로(끝의 /chat/completions는 있어도 없어도 됨)
+export CARBONLEDGER_API_KEY="...키..."            # 인증이 없는 사내 서버면 생략
+export CARBONLEDGER_MODEL="...모델명..."          # custom은 기본값이 없어 반드시 지정(--model로도 가능)
+```
+
+| 제공자 | `CARBONLEDGER_BASE_URL` | 모델 예 |
+|---|---|---|
+| Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.5-flash` |
+| xAI Grok | `https://api.x.ai/v1` | `grok-4` |
+| OpenRouter | `https://openrouter.ai/api/v1` | `google/gemini-2.5-flash` |
+| 사내 vLLM·TGI | `http://내부주소:8000/v1` | 서버에 올린 모델명 |
+
+> ⚠️ **무료 티어 주의**: Gemini 무료 티어 등 일부 서비스는 **보낸 데이터를 모델 학습에 사용**합니다(유료 티어는 보통 제외). 실제 영수증·고지서에는 개인정보가 있으니, 학습 사용 정책을 확인하고 기밀 증빙이면 로컬(C·D)을 쓰세요.
+>
+> ℹ️ 이 경로는 Gemini로 **실호출 검증됐습니다** — 합성 승차권 5필드 정답 일치, 파이프라인 끝까지(추출→검증→산정→리포트) 정상. 다만 제공자마다 모델 특성이 다르니 몇 장으로 먼저 시험하세요.
 
 > ⚠️ **개인정보 주의**: A·B(상용)는 증빙 이미지가 외부 제공자 서버로 전송됩니다. 증빙에는 탑승자 성명·주소·고객번호 등 **직원·거래처의 개인정보**가 포함될 수 있습니다. 이런 증빙의 국외 전송은 **개인정보보호법상 국외이전·처리위탁 요건 검토가 필요할 수 있습니다** — 조직에서 사용할 때는 개인정보 보호책임자와 협의를 권장합니다. 법률·의료·영업비밀 증빙이라면 C(로컬)를 쓰세요. 이 선택이 이 툴의 핵심 프라이버시 결정입니다.
 >
@@ -120,7 +142,7 @@ export CARBONLEDGER_BACKEND=anthropic
 export ANTHROPIC_API_KEY="sk-ant-..."
 carbonledger run examples/input --period 2026 --out examples/out
 ```
-> ℹ️ 개발 검증은 로컬 백엔드(LM Studio)로 수행됐습니다. 상용 백엔드(Claude·ChatGPT)는 각 제공자의 표준 API 규격으로 구현됐으나 **실호출 검증은 사용자 환경의 첫 실행**이 됩니다 — 이미지 1~2장으로 소액 테스트 후 일괄 실행하세요.
+> ℹ️ **백엔드별 검증 수준이 다릅니다.** 로컬(LM Studio)은 실물 고지서로, OpenAI 호환 경로(ChatGPT·custom)는 Gemini 실호출로 파이프라인 끝까지 검증됐습니다. **Claude(anthropic)는 별도 코드 경로라 실호출 미검증**입니다(요청 조립·응답 파싱·재시도는 목 HTTP로 검증). 어느 백엔드든 이미지 1~2장으로 소액 테스트 후 일괄 실행하세요.
 
 나오는 결과:
 ```
