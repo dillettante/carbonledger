@@ -8,7 +8,7 @@
 
 기초자료를 폴더에 넣고 한 번 실행하면 → 비전 LLM이 활동량(연료 L·전력 kWh·이동 구간 등)을 뽑고 → 검증 관문을 통과한 것만 배출계수를 곱해 → **조직 탄소발자국 리포트(md·xlsx)** 로 집계한다.
 
-LLM은 **Claude·ChatGPT 등(상용)** 또는 **LM Studio, Ollama 등(로컬)** 중 선택 — 기밀 증빙이면 로컬 백엔드를 쓰면 이미지가 외부로 나가지 않는다.
+LLM은 **Anthropic API·OpenAI API 등(상용)** 또는 **LM Studio, Ollama 등(로컬)** 중 선택한다. 기밀 증빙이면 로컬 백엔드를 쓰면 이미지가 외부로 나가지 않는다.
 
 ### 나오는 것
 
@@ -56,7 +56,19 @@ LLM은 **Claude·ChatGPT 등(상용)** 또는 **LM Studio, Ollama 등(로컬)** 
 
 **조직경계도 조직이 선언한다.** 배출량은 툴이 계산하지만 *그 숫자가 무엇에 대한 숫자인지*(어느 법인·사업장을 포함했는지, 연결기준이 운영통제인지 지분율인지, 무엇을 왜 뺐는지)는 조직만 안다. `input/inventory.json`에 적으면 리포트 §0에 **그대로 전재**되고, 없으면 리포트가 "조직 선언 없음"이라고 적는다. 툴은 그 선언의 적정성을 판정하지 않는다 — [`examples/input/inventory.json`](examples/input/inventory.json) 참조.
 
-## 설치
+## 설치와 사용 환경
+
+이 저장소는 업로드해서 쓰는 ChatGPT/Claude.ai용 Skill이 아니라, 사용자의 컴퓨터에서 증빙을 읽고 `out/`에 감사추적 가능한 결과물을 만드는 **로컬 Python CLI**다. 선택적으로 로컬 `stdio` MCP 서버로 등록할 수 있다.
+
+| 환경 | 가능한 일 | 유의점 |
+| --- | --- | --- |
+| 터미널·로컬 코딩 에이전트 | 증빙 추출, 검증, 산정, md·xlsx 리포트 생성 | 전체 기능. 입력 파일과 결과물이 로컬에 남는다. |
+| Claude Desktop·Claude Code·Codex 등 로컬 MCP 클라이언트 | 위 파이프라인을 MCP 도구로 호출 | 이 프로젝트의 MCP는 `stdio` 전용이다. |
+| Claude.ai·ChatGPT의 일반 대화 | 생성된 리포트·발췌의 설명·검토 보조 | 이 저장소의 CLI/MCP를 실행하거나 로컬 폴더를 읽을 수 없다. |
+
+ChatGPT나 Claude의 유료 대화형 구독만으로 이 프로그램의 상용 LLM 백엔드가 활성화되지는 않는다. 아래 `OPENAI_API_KEY`와 `ANTHROPIC_API_KEY`는 각 API 서비스의 키이며, ChatGPT와 OpenAI API의 과금·관리는 별개다. [OpenAI의 구독/API 구분 안내](https://help.openai.com/en/articles/8156019)를 참고한다.
+
+### 로컬 설치
 
 ```bash
 git clone https://github.com/dillettante/carbonledger.git && cd carbonledger
@@ -70,13 +82,13 @@ pip install -e .          # requests + openpyxl
 | 백엔드 | 설정 | 특징 |
 |---|---|---|
 | **Claude** | `CARBONLEDGER_BACKEND=anthropic` + `ANTHROPIC_API_KEY` | 정확도 높음. ⚠️ 증빙 이미지가 Anthropic으로 전송 · **실호출 미검증**(아래 한계 참조) |
-| **ChatGPT** | `CARBONLEDGER_BACKEND=openai` + `OPENAI_API_KEY` | 정확도 높음. ⚠️ 증빙 이미지가 OpenAI로 전송 · OpenAI 호환 경로는 실호출 검증됨(Gemini로 파이프라인 끝까지) |
+| **OpenAI API** *(ChatGPT 앱 아님)* | `CARBONLEDGER_BACKEND=openai` + `OPENAI_API_KEY` | 정확도 높음. ⚠️ 증빙 이미지가 OpenAI로 전송 · OpenAI 호환 경로는 실호출 검증됨(Gemini로 파이프라인 끝까지) |
 | **로컬(LM Studio)** | 기본값. [LM Studio](https://lmstudio.ai) 설치 후 `qwen/qwen3-vl-4b` 로드 | **증빙이 외부로 안 나감** — 기밀·개인정보 증빙에 권장. **실물 고지서로 검증된 경로** |
 | **로컬(Ollama)** | `CARBONLEDGER_BACKEND=ollama` + `ollama pull qwen3-vl:4b` | 증빙이 외부로 안 나감. 터미널 사용자용 |
 | **그 밖의 아무 API** | `CARBONLEDGER_BACKEND=custom` + `CARBONLEDGER_BASE_URL`·`CARBONLEDGER_MODEL`(+선택 `CARBONLEDGER_API_KEY`) | OpenAI 호환이면 무엇이든 — Gemini·xAI·OpenRouter·사내 vLLM. **Gemini로 실호출 검증됨** |
 
 ```bash
-# 예: Claude로 쓰기
+# 예: Anthropic API로 쓰기
 export CARBONLEDGER_BACKEND=anthropic
 export ANTHROPIC_API_KEY="sk-ant-..."
 
@@ -86,7 +98,7 @@ export CARBONLEDGER_BASE_URL="https://generativelanguage.googleapis.com/v1beta/o
 export CARBONLEDGER_API_KEY="..."      # 인증 없는 사내 서버면 생략
 export CARBONLEDGER_MODEL="gemini-2.5-flash"
 ```
-모델은 `--model`로 바꿀 수 있다(미지정 시 백엔드별 기본: qwen3-vl-4b / gpt-4o / claude-sonnet-5).
+모델은 `--model`로 바꿀 수 있다(미지정 시 백엔드별 기본: qwen3-vl-4b / gpt-4o / claude-sonnet-5). API 키는 저장소·입력 CSV·채팅에 적지 말고, 로컬 환경변수 또는 비밀 관리 도구로만 제공한다. [OpenAI API 키 보안 안내](https://platform.openai.com/docs/api-reference/backward-compatibility?lang=ruby)를 따른다.
 **증빙에 개인정보·영업비밀이 있으면 로컬 백엔드를 쓰라** — 상용 백엔드는 이미지가 제공자 서버로 나간다.
 
 **거리 API 키** (출장 산정용, 선택) — Kakao 또는 Naver:
@@ -129,14 +141,24 @@ carbonledger run examples/input --period 2026 --out examples/out
 ```
 철도 거리는 내장 역좌표로 산정되므로 이 예제는 **Kakao 키 없이도** 출장 배출량까지 나온다.
 
-### AI 에이전트로 쓰기 (MCP, 선택)
+### 로컬 AI 에이전트로 쓰기 (MCP, 선택)
 
-터미널 대신 Claude Desktop 등에서 대화로 굴리려면 MCP 서버로 등록한다:
+터미널 대신 Claude Desktop·Claude Code·Codex처럼 **로컬 `stdio` MCP를 실행할 수 있는** 에이전트에서 대화로 굴리려면 등록한다:
 ```json
 { "mcpServers": { "carbonledger": { "command": "carbonledger-mcp",
                                     "env": { "CARBONLEDGER_BACKEND": "lmstudio" } } } }
 ```
-도구 8종(run·review_status·review_merge·get_records·list_factors·inventory_template·diff·selftest)이 등록된다. **계산 도구는 일부러 없다** — 에이전트가 활동량×계수를 직접 하면 단위검사·산술 불변식·감사추적이 사라지므로 파이프라인 전체만 노출하고, 교정본도 CLI와 같은 관문을 통과해야 반영된다. 설정 상세는 [PLAYBOOK.md](PLAYBOOK.md).
+도구 8종(run·review_status·review_merge·get_records·list_factors·inventory_template·diff·selftest)이 등록된다. **계산 도구는 일부러 없다** — 에이전트가 활동량×계수를 직접 하면 단위검사·산술 불변식·감사추적이 사라지므로 파이프라인 전체만 노출하고, 교정본도 CLI와 같은 관문을 통과해야 반영된다. 설정 상세는 [PLAYBOOK.md](PLAYBOOK.md). 이 MCP는 로컬 증빙 처리를 전제로 `stdio`만 지원하므로, ChatGPT·Claude.ai 웹 채팅에 직접 연결하거나 공인 인터넷에 노출하지 않는다.
+
+### ChatGPT·Claude.ai에서의 안전한 보조 사용
+
+웹 채팅은 이 프로그램을 실행하는 자리가 아니라, 로컬 실행 뒤 사람이 해석·검토하는 보조 수단으로 쓴다.
+
+1. 로컬에서 `carbonledger run`과 `carbonledger review`를 끝내고 review queue를 처리한다.
+2. 필요한 경우에만 `out/report.md`의 관련 절, 계수 부록, `records.json`의 필요한 발췌를 업로드한다. 원본 영수증·고지서는 개인정보·거래정보가 있을 수 있으므로 기본적으로 업로드하지 않는다.
+3. 채팅에는 “첨부 발췌만 근거로, 누락 Scope·확인 필요 계수·review queue 잔여 건을 표로 정리하고 산정값을 새로 계산하거나 단정하지 마”처럼 요청한다.
+
+이 경로는 설명과 검토를 돕지만, CLI의 단위검사·fail-closed 관문·수정 이력은 대체하지 않는다.
 
 ### CSV 형식 (요약 — 상세는 [PLAYBOOK.md](PLAYBOOK.md) §1)
 
